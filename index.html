@@ -401,9 +401,9 @@
         let cachedLocations = {}; 
         let isInitialLoad = true;
 
-        // Cumulative Grace Period Tracker (15 Minutes = 900,000 ms)
+        // Cumulative Grace Period Tracker (15 Minutes Max = 900,000 ms)
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
-        let gracePeriodRemaining = parseFloat(localStorage.getItem('splash_tag_grace_remaining')) || TOTAL_GRACE_PERIOD;
+        let totalTimeSpentOutside = 0; // Milliseconds accumulated from Firebase
         let lastOutsideTimestamp = null;
 
         // Populate Player Select Dropdown
@@ -429,6 +429,11 @@
             document.getElementById('player-selection-container').innerHTML = `
                 <div class="locked-player-display">👤 ${selectedName}</div>
             `;
+
+            // Listen to current player's accumulated out-of-bounds time in Firebase
+            db.ref('game/outOfBoundsTime/' + selectedName).on('value', (snapshot) => {
+                totalTimeSpentOutside = snapshot.val() || 0;
+            });
 
             renderTargetList();
             renderAllPlayerMarkers();
@@ -696,7 +701,7 @@
             return inside;
         }
 
-        // --- ZONE BOUNDARY & CUMULATIVE GRACE PERIOD CHECK ---
+        // --- ZONE BOUNDARY & FIREBASE SYNCED GRACE PERIOD CHECK ---
         function checkZoneBoundaries(phaseNum) {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
@@ -716,14 +721,18 @@
                 if (!isInside) {
                     if (lastOutsideTimestamp !== null) {
                         const elapsed = now - lastOutsideTimestamp;
-                        gracePeriodRemaining -= elapsed;
-                        localStorage.setItem('splash_tag_grace_remaining', gracePeriodRemaining);
+                        totalTimeSpentOutside += elapsed;
+                        
+                        // Sync total elapsed time to Firebase Realtime Database
+                        db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
                     }
                     lastOutsideTimestamp = now;
 
-                    if (gracePeriodRemaining > 0) {
-                        const minutes = Math.floor(gracePeriodRemaining / 60000);
-                        const seconds = Math.floor((gracePeriodRemaining % 60000) / 1000);
+                    const remainingMs = TOTAL_GRACE_PERIOD - totalTimeSpentOutside;
+
+                    if (remainingMs > 0) {
+                        const minutes = Math.floor(remainingMs / 60000);
+                        const seconds = Math.floor((remainingMs % 60000) / 1000);
                         const formattedSec = seconds < 10 ? `0${seconds}` : seconds;
                         
                         document.getElementById('warning-countdown').innerText = `Return in ${minutes}:${formattedSec}`;
@@ -736,7 +745,7 @@
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
-                    // Safe inside: pause the timer
+                    // Safe inside: pause tracking
                     lastOutsideTimestamp = null;
                     document.getElementById('warning-card').style.display = 'none';
                 }
