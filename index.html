@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deer Lake Battle Royale</title>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Firebase App & Realtime Database CDN (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #121212;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* Status Card */
+        .status-card {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(18, 18, 18, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 10px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            min-width: 240px;
+        }
+
+        .status-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #aaa;
+        }
+
+        .status-phase {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin: 2px 0;
+        }
+
+        .status-timer {
+            font-size: 0.85rem;
+            color: #4CAF50;
+            font-family: monospace;
+        }
+
+        .status-remaining {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #00b0ff;
+            margin-top: 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 4px;
+        }
+
+        /* Grace Period Warning Banner */
+        .warning-card {
+            display: none;
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 82, 82, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 10px 18px;
+            border-radius: 12px;
+            border: 1px solid #ff1744;
+            box-shadow: 0 4px 20px rgba(255, 23, 68, 0.5);
+            text-align: center;
+            min-width: 260px;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: translateX(-50%) scale(1); }
+            100% { transform: translateX(-50%) scale(1.03); }
+        }
+
+        .warning-title {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .warning-countdown {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #fff;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+
+        /* Elimination Announcement Banner (Bottom) */
+        .announcement-banner {
+            display: none;
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(220, 38, 38, 0.92);
+            backdrop-filter: blur(8px);
+            padding: 10px 20px;
+            border-radius: 25px;
+            border: 1px solid #ff5252;
+            box-shadow: 0 4px 20px rgba(255, 82, 82, 0.6);
+            text-align: center;
+            width: 85%;
+            max-width: 480px;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translate(-50%, 20px); opacity: 0; }
+            to { transform: translate(-50%, 0); opacity: 1; }
+        }
+
+        .announcement-text {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        /* Sidebar & Toggle Button */
+        .sidebar-toggle {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 1100;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        }
+
+        .sidebar {
+            position: absolute;
+            top: 0;
+            left: -320px;
+            width: 280px;
+            height: 100%;
+            z-index: 1050;
+            background: rgba(18, 18, 18, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+            transition: left 0.3s ease;
+            padding: 60px 20px 20px 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar.open {
+            left: 0;
+        }
+
+        .sidebar-header {
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+
+        .dropdown-select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            background: #2a2a2a;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .locked-player-display {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #0284c7;
+            font-size: 0.95rem;
+            font-weight: bold;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .targets-container {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #333;
+        }
+
+        .target-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #ff5252;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .target-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .target-item {
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            background: #262626;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .target-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .target-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #00e676;
+            cursor: pointer;
+        }
+
+        .target-name {
+            font-weight: 500;
+        }
+
+        /* Testing Controls */
+        .controls {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(18, 18, 18, 0.9);
+            padding: 6px 10px;
+            border-radius: 20px;
+            display: flex;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn {
+            background: #2a2a2a;
+            color: #fff;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .btn.active {
+            background: #007bff;
+        }
+    </style>
+</head>
+<body>
+
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰ Targets</button>
+
+    <div id="sidebar" class="sidebar">
+        <div id="sidebar-header-title" class="sidebar-header">Select Your Name</div>
+        
+        <div id="player-selection-container">
+            <select id="player-select" class="dropdown-select" onchange="changePlayer()">
+                <option value="" disabled selected>-- Select Name --</option>
+            </select>
+        </div>
+
+        <div class="targets-container">
+            <div class="target-title">
+                <span>Active Targets</span>
+                <span id="my-eliminated-count" style="color: #4CAF50; font-size: 0.7rem;">Your Eliminations: 0</span>
+            </div>
+            <ul id="target-list" class="target-list">
+                <li style="color: #666; font-size: 0.8rem;">Select your name above to view targets.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="status-card">
+        <div class="status-title">Active Play Zone</div>
+        <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
+        <div id="time-label" class="status-timer">Clock: --:--</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 44/44</div>
+    </div>
+
+    <!-- Grace Period Countdown Warning -->
+    <div id="warning-card" class="warning-card">
+        <div class="warning-title">⚠️ Outside Safe Zone!</div>
+        <div id="warning-countdown" class="warning-countdown">Return in 15:00</div>
+    </div>
+
+    <!-- Live Elimination Announcement Banner -->
+    <div id="announcement-banner" class="announcement-banner">
+        <div id="announcement-text" class="announcement-text">💀 Player was eliminated!</div>
+    </div>
+
+    <div class="controls">
+        <button class="btn active" onclick="setMode('auto')">Auto</button>
+        <button class="btn" onclick="setMode(1)">P1</button>
+        <button class="btn" onclick="setMode(2)">P2</button>
+        <button class="btn" onclick="setMode(3)">P3</button>
+        <button class="btn" onclick="setMode(4)">P4</button>
+    </div>
+
+    <!-- Elimination Confirmation Popup -->
+    <div id="confirm-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div style="background: #1e1e1e; border: 1px solid #ff5252; padding: 24px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+            <h3 style="color: #ff5252; margin-top: 0;">TAG CLAIMED!</h3>
+            <p id="confirm-msg" style="font-size: 0.95rem; color: #ddd; margin-bottom: 20px;">Someone tagged you!</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button onclick="respondToTag(false)" style="flex: 1; padding: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
+                <button onclick="respondToTag(true)" style="flex: 1; padding: 12px; background: #ff5252; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // Splash Tag Deer Lake Firebase Credentials
+        const firebaseConfig = {
+            apiKey: "AIzaSyCGIaddkRmlTf8Hn0Bkb5S_Agel20CgCZU",
+            authDomain: "splash-tag-deer-lake.firebaseapp.com",
+            databaseURL: "https://splash-tag-deer-lake-default-rtdb.firebaseio.com",
+            projectId: "splash-tag-deer-lake",
+            storageBucket: "splash-tag-deer-lake.firebasestorage.app",
+            messagingSenderId: "712975647446",
+            appId: "1:712975647446:web:9087e1a37cb2788ab83f77"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Player Roster
+        const players = [
+            "Shaianne Casasis", "Sydney Myung", "Ryan Basu", "Eno Efe", "Acacia Chang",
+            "Kylee Foo", "Sofia Villanueva", "Lake", "Janz", "Aavin Izadi",
+            "Micaila Li", "Asher Campbell", "Betty Yang", "Jacob Kissie", "Ethan Pang",
+            "Simon Otsuji-Pickell", "Joshua Jung", "Obed Manzi", "Soukina Hammoud", "Mataya Opong",
+            "Bobby Yang", "Hannah Buch", "Chenay Wong", "Javier Neveu", "Liv Neveu",
+            "Baptiste Neveu", "Braedan Roberts", "Jamilee Sun", "Owen Sun", "Kaylan Sawatzky",
+            "Doris Li", "Amery Gardiner", "Harrison Sellinger", "Ev Navarro", "Zoe Serdar",
+            "Aidan Serdar", "Richard Guo", "Julia Kucharek", "Tiemar Tadese", "Erin Cooper",
+            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Zachary Chang"
+        ];
+
+        let selectedPlayerIndex = null;
+        let globalEliminated = {}; 
+        let userEliminations = {}; 
+        let playerMarkers = {};
+        let playerMarker = null;
+        let cachedLocations = {}; 
+        let isInitialLoad = true;
+
+        // Cumulative Grace Period Tracker (15 Minutes = 900,000 ms)
+        const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
+        let gracePeriodRemaining = parseFloat(localStorage.getItem('splash_tag_grace_remaining')) || TOTAL_GRACE_PERIOD;
+        let lastOutsideTimestamp = null;
+
+        // Populate Player Select Dropdown
+        const playerSelect = document.getElementById('player-select');
+        players.forEach((player, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            opt.innerText = player;
+            playerSelect.appendChild(opt);
+        });
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        function changePlayer() {
+            const selectEl = document.getElementById('player-select');
+            selectedPlayerIndex = parseInt(selectEl.value);
+            const selectedName = players[selectedPlayerIndex];
+
+            // Replace select dropdown with locked player name badge
+            document.getElementById('sidebar-header-title').innerText = "Logged In As";
+            document.getElementById('player-selection-container').innerHTML = `
+                <div class="locked-player-display">👤 ${selectedName}</div>
+            `;
+
+            renderTargetList();
+            renderAllPlayerMarkers();
+        }
+
+        // --- ANNOUNCEMENT BANNER TRIGGER ---
+        function triggerAnnouncement(victim, cause) {
+            const banner = document.getElementById('announcement-banner');
+            const textEl = document.getElementById('announcement-text');
+
+            if (cause === "Out of Bounds") {
+                textEl.innerHTML = `🚨 <b>${victim}</b> was eliminated for being <b>Out of Bounds</b>!`;
+            } else {
+                textEl.innerHTML = `💥 <b>${victim}</b> was eliminated by <b>${cause}</b>!`;
+            }
+
+            banner.style.display = 'block';
+
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 8000);
+        }
+
+        // --- REALTIME ELIMINATIONS & CONFIRMED TAGS LISTENER ---
+        db.ref('game/eliminated').on('value', (snapshot) => {
+            const newEliminated = snapshot.val() || {};
+
+            if (!isInitialLoad) {
+                Object.keys(newEliminated).forEach(player => {
+                    if (!globalEliminated[player]) {
+                        const cause = userEliminations[player] || "Out of Bounds";
+                        triggerAnnouncement(player, cause);
+                    }
+                });
+            }
+
+            globalEliminated = newEliminated;
+            isInitialLoad = false;
+            updateRemainingPlayersCount();
+            renderTargetList();
+            renderAllPlayerMarkers();
+        });
+
+        db.ref('game/eliminatedBy').on('value', (snapshot) => {
+            userEliminations = snapshot.val() || {};
+            renderTargetList();
+        });
+
+        function updateRemainingPlayersCount() {
+            const totalEliminated = Object.keys(globalEliminated).length;
+            const remaining = players.length - totalEliminated;
+            document.getElementById('players-remaining-label').innerText = `Players Remaining: ${remaining}/${players.length}`;
+        }
+
+        // --- LISTEN FOR PENDING TAGS FOR CURRENT PLAYER ---
+        db.ref('game/pendingTags').on('value', (snapshot) => {
+            if (selectedPlayerIndex === null) return;
+
+            const myName = players[selectedPlayerIndex];
+            const pending = snapshot.val() || {};
+
+            if (pending[myName]) {
+                const tagData = pending[myName];
+                document.getElementById('confirm-msg').innerText = `${tagData.taggedBy} marked you as eliminated! Confirm?`;
+                document.getElementById('confirm-modal').setAttribute('data-attacker', tagData.taggedBy);
+                document.getElementById('confirm-modal').style.display = 'flex';
+            } else {
+                document.getElementById('confirm-modal').style.display = 'none';
+            }
+        });
+
+        function renderTargetList() {
+            if (selectedPlayerIndex === null) return;
+
+            const playerName = players[selectedPlayerIndex];
+            const targetListEl = document.getElementById('target-list');
+            targetListEl.innerHTML = '';
+
+            let myEliminatedCount = 0;
+            Object.keys(userEliminations).forEach(target => {
+                if (userEliminations[target] === playerName) {
+                    myEliminatedCount++;
+                }
+            });
+            document.getElementById('my-eliminated-count').innerText = `Your Eliminations: ${myEliminatedCount}`;
+
+            if (globalEliminated[playerName]) {
+                targetListEl.innerHTML = '<li style="color: #ff5252; padding: 12px; text-align: center; font-weight: bold;">💀 YOU ARE ELIMINATED 💀</li>';
+                return;
+            }
+
+            const livingTargets = [];
+            for (let i = 0; i < players.length; i++) {
+                const targetIndex = (selectedPlayerIndex + 1 + i) % players.length;
+                const targetName = players[targetIndex];
+
+                if (targetName === playerName) continue; 
+
+                if (!globalEliminated[targetName]) {
+                    livingTargets.push(targetName);
+                }
+            }
+
+            const activeTargets = livingTargets.slice(0, 5);
+
+            if (activeTargets.length === 0) {
+                targetListEl.innerHTML = '<li style="color: #00e676; padding: 10px; text-align: center;">🎉 All targets eliminated!</li>';
+                return;
+            }
+
+            activeTargets.forEach(targetName => {
+                const li = document.createElement('li');
+                li.className = 'target-item';
+                
+                li.innerHTML = `
+                    <div class="target-info">
+                        <input type="checkbox" class="target-checkbox" onclick="tagTarget('${targetName}', event)">
+                        <span class="target-name">${targetName}</span>
+                    </div>
+                `;
+                
+                targetListEl.appendChild(li);
+            });
+        }
+
+        function tagTarget(targetName, event) {
+            event.preventDefault();
+            if (selectedPlayerIndex === null) return;
+
+            const attackerName = players[selectedPlayerIndex];
+
+            db.ref('game/pendingTags/' + targetName).set({
+                taggedBy: attackerName,
+                timestamp: Date.now()
+            });
+
+            alert(`Tag request sent to ${targetName}! Awaiting their confirmation.`);
+        }
+
+        function respondToTag(confirmed) {
+            if (selectedPlayerIndex === null) return;
+            const myName = players[selectedPlayerIndex];
+            const modal = document.getElementById('confirm-modal');
+            const attackerName = modal.getAttribute('data-attacker');
+
+            if (confirmed) {
+                if (attackerName) {
+                    db.ref('game/eliminatedBy/' + myName).set(attackerName);
+                }
+                db.ref('game/eliminated/' + myName).set(true);
+                db.ref('game/pendingTags/' + myName).remove();
+                modal.style.display = 'none';
+            } else {
+                db.ref('game/pendingTags/' + myName).remove();
+                modal.style.display = 'none';
+            }
+        }
+
+        // --- MAP & SAFE ZONES ---
+        const map = L.map('map', { zoomControl: false }).setView([49.2365, -122.9730], 15);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+
+        const zones = {
+            1: {
+                name: "Phase 1 (2:30 - 3:30 PM)",
+                color: "#ff8c00",
+                coords: [
+                    [49.2392966, -122.984863],
+                    [49.2335103, -122.9844982],
+                    [49.2323894, -122.9813869],
+                    [49.2314926, -122.9801852],
+                    [49.2299372, -122.9803784],
+                    [49.2298532, -122.9700572],
+                    [49.2318149, -122.9678042],
+                    [49.2338956, -122.9668386],
+                    [49.233829, -122.9657818],
+                    [49.2339201, -122.9649449],
+                    [49.2341793, -122.9647518],
+                    [49.2397255, -122.9647775],
+                    [49.2400162, -122.9658987],
+                    [49.2417253, -122.9688384],
+                    [49.2417884, -122.9753615],
+                    [49.2411159, -122.9756405],
+                    [49.2400863, -122.9768099],
+                    [49.2396029, -122.9784514]
+                ]
+            },
+            2: {
+                name: "Phase 2 (3:30 - 4:30 PM)",
+                color: "#ffd700",
+                coords: [
+                    [49.2417884, -122.9753615],
+                    [49.2411159, -122.9756405],
+                    [49.2400863, -122.9768099],
+                    [49.2396029, -122.9784514],
+                    [49.2335644, -122.9790622],
+                    [49.2325556, -122.9758435],
+                    [49.2331581, -122.9689771],
+                    [49.2338956, -122.9668386],
+                    [49.233829, -122.9657818],
+                    [49.2339201, -122.9649449],
+                    [49.2341793, -122.9647518],
+                    [49.2397255, -122.9647775],
+                    [49.2400162, -122.9658987],
+                    [49.2417253, -122.9688384]
+                ]
+            },
+            3: {
+                name: "Phase 3 (4:30 - 5:30 PM)",
+                color: "#00e676",
+                coords: [
+                    [49.2367845, -122.964765],
+                    [49.2384903, -122.9673721],
+                    [49.2389736, -122.9680802],
+                    [49.2408509, -122.9680587],
+                    [49.2417253, -122.9688384],
+                    [49.2417755, -122.9730262],
+                    [49.2402485, -122.9730798],
+                    [49.2402625, -122.9763092],
+                    [49.2374255, -122.9767383],
+                    [49.2338956, -122.9668386],
+                    [49.233829, -122.9657818],
+                    [49.2339201, -122.9649449],
+                    [49.2341793, -122.9647518]
+                ]
+            },
+            4: {
+                name: "Phase 4 (5:30 - 6:15 PM)",
+                color: "#00b0ff",
+                coords: [
+                    [49.2417755, -122.9730262],
+                    [49.2402485, -122.9730798],
+                    [49.2402585, -122.9743531],
+                    [49.2375826, -122.9744067],
+                    [49.2376317, -122.9692783],
+                    [49.2378979, -122.967948],
+                    [49.2383462, -122.9671755],
+                    [49.2389736, -122.9680802],
+                    [49.2408509, -122.9680587],
+                    [49.2417253, -122.9688384]
+                ]
+            }
+        };
+
+        let activePolygon = null;
+        let manualOverride = false;
+        let currentPhaseNum = 1;
+
+        // --- POINT IN POLYGON ALGORITHM ---
+        function isPointInPolygon(point, vs) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                const xi = vs[i][0], yi = vs[i][1];
+                const xj = vs[j][0], yj = vs[j][1];
+                
+                const intersect = ((yi > y) !== (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        // --- ZONE BOUNDARY & CUMULATIVE GRACE PERIOD CHECK ---
+        function checkZoneBoundaries(phaseNum) {
+            if (selectedPlayerIndex === null) return;
+            const myName = players[selectedPlayerIndex];
+            if (globalEliminated[myName]) {
+                document.getElementById('warning-card').style.display = 'none';
+                return;
+            }
+
+            const currentZoneCoords = zones[phaseNum].coords;
+
+            if (playerMarker) {
+                const currentLatLng = playerMarker.getLatLng();
+                const userPoint = [currentLatLng.lat, currentLatLng.lng];
+                const isInside = isPointInPolygon(userPoint, currentZoneCoords);
+                const now = Date.now();
+
+                if (!isInside) {
+                    if (lastOutsideTimestamp !== null) {
+                        const elapsed = now - lastOutsideTimestamp;
+                        gracePeriodRemaining -= elapsed;
+                        localStorage.setItem('splash_tag_grace_remaining', gracePeriodRemaining);
+                    }
+                    lastOutsideTimestamp = now;
+
+                    if (gracePeriodRemaining > 0) {
+                        const minutes = Math.floor(gracePeriodRemaining / 60000);
+                        const seconds = Math.floor((gracePeriodRemaining % 60000) / 1000);
+                        const formattedSec = seconds < 10 ? `0${seconds}` : seconds;
+                        
+                        document.getElementById('warning-countdown').innerText = `Return in ${minutes}:${formattedSec}`;
+                        document.getElementById('warning-card').style.display = 'block';
+                    } else {
+                        document.getElementById('warning-card').style.display = 'none';
+                        lastOutsideTimestamp = null;
+                        db.ref('game/eliminatedBy/' + myName).set("Out of Bounds");
+                        db.ref('game/eliminated/' + myName).set(true);
+                        alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
+                    }
+                } else {
+                    // Safe inside: pause the timer
+                    lastOutsideTimestamp = null;
+                    document.getElementById('warning-card').style.display = 'none';
+                }
+            }
+        }
+
+        function renderZone(phaseNum) {
+            currentPhaseNum = phaseNum;
+            if (activePolygon) map.removeLayer(activePolygon);
+
+            const zone = zones[phaseNum];
+            activePolygon = L.polygon(zone.coords, {
+                color: zone.color,
+                fillColor: zone.color,
+                fillOpacity: 0.35,
+                weight: 3
+            }).addTo(map);
+
+            document.getElementById('phase-label').innerText = zone.name;
+            document.getElementById('phase-label').style.color = zone.color;
+        }
+
+        function getPhaseByTime() {
+            const now = new Date();
+            const minutes = now.getHours() * 60 + now.getMinutes();
+
+            if (minutes < 15 * 60 + 30) return 1; // Before 3:30 PM
+            if (minutes < 16 * 60 + 30) return 2; // Before 4:30 PM
+            if (minutes < 17 * 60 + 30) return 3; // Before 5:30 PM
+            return 4;                            // 5:30 PM - 6:15 PM
+        }
+
+        function updateGame() {
+            const now = new Date();
+            document.getElementById('time-label').innerText = `Clock: ${now.toLocaleTimeString()}`;
+
+            const activePhase = getPhaseByTime();
+            if (!manualOverride) {
+                renderZone(activePhase);
+            }
+
+            checkZoneBoundaries(currentPhaseNum);
+        }
+
+        function setMode(mode) {
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(b => b.classList.remove('active'));
+
+            if (mode === 'auto') {
+                manualOverride = false;
+                buttons[0].classList.add('active');
+                updateGame();
+            } else {
+                manualOverride = true;
+                buttons[mode].classList.add('active');
+                renderZone(mode);
+                checkZoneBoundaries(mode);
+            }
+        }
+
+        // --- LOCATION SHARING & MARKER RENDERING ---
+        let lastFirebaseUpdate = 0;
+        const UPDATE_INTERVAL = 10 * 60 * 1000; // 10 minutes
+
+        function renderAllPlayerMarkers() {
+            Object.keys(cachedLocations).forEach(name => {
+                const data = cachedLocations[name];
+                
+                if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) return;
+
+                const isEliminated = !!globalEliminated[name];
+                const markerColor = isEliminated ? "#ff5252" : "#00e676";
+                const statusLabel = isEliminated ? " (ELIMINATED)" : " (ACTIVE)";
+
+                if (playerMarkers[name]) {
+                    playerMarkers[name].setLatLng([data.lat, data.lng]);
+                    playerMarkers[name].setStyle({ fillColor: markerColor });
+                    playerMarkers[name].setPopupContent(`<b>${name}</b>${statusLabel}`);
+                } else {
+                    playerMarkers[name] = L.circleMarker([data.lat, data.lng], {
+                        radius: 7,
+                        fillColor: markerColor,
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    }).addTo(map).bindPopup(`<b>${name}</b>${statusLabel}`);
+                }
+            });
+
+            if (selectedPlayerIndex !== null && playerMarker) {
+                const myName = players[selectedPlayerIndex];
+                const isSelfEliminated = !!globalEliminated[myName];
+                playerMarker.setStyle({
+                    fillColor: isSelfEliminated ? "#ff5252" : "#00b0ff"
+                });
+            }
+        }
+
+        db.ref('game/locations').on('value', (snapshot) => {
+            cachedLocations = snapshot.val() || {};
+            renderAllPlayerMarkers();
+        });
+
+        // Watch device GPS
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const now = Date.now();
+
+                    const myName = selectedPlayerIndex !== null ? players[selectedPlayerIndex] : null;
+                    const isSelfEliminated = myName ? !!globalEliminated[myName] : false;
+                    const selfColor = isSelfEliminated ? "#ff5252" : "#00b0ff";
+
+                    if (!playerMarker) {
+                        playerMarker = L.circleMarker([lat, lng], {
+                            radius: 8,
+                            fillColor: selfColor,
+                            color: "#ffffff",
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        }).addTo(map).bindPopup("You are here");
+                    } else {
+                        playerMarker.setLatLng([lat, lng]);
+                        playerMarker.setStyle({ fillColor: selfColor });
+                    }
+
+                    checkZoneBoundaries(currentPhaseNum);
+
+                    if (selectedPlayerIndex !== null && (now - lastFirebaseUpdate >= UPDATE_INTERVAL)) {
+                        db.ref('game/locations/' + myName).set({
+                            lat: lat,
+                            lng: lng,
+                            timestamp: now
+                        });
+                        lastFirebaseUpdate = now;
+                    }
+                },
+                (err) => console.warn("GPS Access Denied/Unavailable"),
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+            );
+        }
+
+        setInterval(updateGame, 1000);
+        updateGame();
+    </script>
+</body>
+</html>
