@@ -272,6 +272,7 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
+            overflow-y: auto;
         }
 
         .sidebar.open {
@@ -407,6 +408,7 @@
             </select>
         </div>
 
+        <!-- Active Targets Section -->
         <div class="targets-container">
             <div class="target-title">
                 <span>Active Targets</span>
@@ -416,13 +418,23 @@
                 <li style="color: #666; font-size: 0.8rem;">Select your name above to view targets.</li>
             </ul>
         </div>
+
+        <!-- Targeted By Section -->
+        <div class="targets-container">
+            <div class="target-title" style="color: #ff9800;">
+                <span>Targeting You 🎯</span>
+            </div>
+            <ul id="targeted-by-list" class="target-list">
+                <li style="color: #666; font-size: 0.8rem;">Select your name above.</li>
+            </ul>
+        </div>
     </div>
 
     <div class="status-card">
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 44/44</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 45/45</div>
     </div>
 
     <!-- Grace Period Countdown Warning -->
@@ -498,7 +510,7 @@
             "Baptiste Neveu", "Braedan Roberts", "Jamilee Sun", "Owen Sun", "Kaylan Sawatzky",
             "Doris Li", "Amery Gardiner", "Harrison Sellinger", "Ev Navarro", "Zoe Serdar",
             "Aidan Serdar", "Richard Guo", "Julia Kucharek", "Tiemar Tadese", "Erin Cooper",
-            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Zachary Chang"
+            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Philos Mlobela", "Zachary Chang"
         ];
 
         let selectedPlayerIndex = null;
@@ -512,7 +524,7 @@
 
         // Cumulative Grace Period Tracker (15 Minutes Max = 900,000 ms)
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
-        let totalTimeSpentOutside = 0; // Milliseconds accumulated from Firebase
+        let totalTimeSpentOutside = 0; 
         let lastOutsideTimestamp = null;
 
         // Populate Player Select Dropdown
@@ -537,13 +549,11 @@
             selectedPlayerIndex = parseInt(selectEl.value);
             const selectedName = players[selectedPlayerIndex];
 
-            // Replace select dropdown with locked player name badge
             document.getElementById('sidebar-header-title').innerText = "Logged In As";
             document.getElementById('player-selection-container').innerHTML = `
                 <div class="locked-player-display">👤 ${selectedName}</div>
             `;
 
-            // Listen to current player's accumulated out-of-bounds time in Firebase
             db.ref('game/outOfBoundsTime/' + selectedName).on('value', (snapshot) => {
                 totalTimeSpentOutside = snapshot.val() || 0;
             });
@@ -575,7 +585,6 @@
                 banner.style.display = 'none';
             }, 8000);
 
-            // Record into log history
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             announcementLogs.unshift({ message: logMsg, time: timeStr });
             renderAnnouncementLogs();
@@ -652,12 +661,34 @@
             }
         });
 
+        // Get active targets for any given player index
+        function getActiveTargetsForPlayer(playerIdx) {
+            const playerName = players[playerIdx];
+            if (globalEliminated[playerName]) return [];
+
+            const livingTargets = [];
+            for (let i = 0; i < players.length; i++) {
+                const targetIndex = (playerIdx + 1 + i) % players.length;
+                const targetName = players[targetIndex];
+
+                if (targetName === playerName) continue; 
+                if (!globalEliminated[targetName]) {
+                    livingTargets.push(targetName);
+                }
+            }
+
+            return livingTargets.slice(0, 5);
+        }
+
         function renderTargetList() {
             if (selectedPlayerIndex === null) return;
 
             const playerName = players[selectedPlayerIndex];
             const targetListEl = document.getElementById('target-list');
+            const targetedByListEl = document.getElementById('targeted-by-list');
+            
             targetListEl.innerHTML = '';
+            targetedByListEl.innerHTML = '';
 
             let myEliminatedCount = 0;
             Object.keys(userEliminations).forEach(target => {
@@ -669,41 +700,57 @@
 
             if (globalEliminated[playerName]) {
                 targetListEl.innerHTML = '<li style="color: #ff5252; padding: 12px; text-align: center; font-weight: bold;">💀 YOU ARE ELIMINATED 💀</li>';
+                targetedByListEl.innerHTML = '<li style="color: #666; font-size: 0.8rem; text-align: center; padding: 6px 0;">None</li>';
                 return;
             }
 
-            const livingTargets = [];
-            for (let i = 0; i < players.length; i++) {
-                const targetIndex = (selectedPlayerIndex + 1 + i) % players.length;
-                const targetName = players[targetIndex];
-
-                if (targetName === playerName) continue; 
-
-                if (!globalEliminated[targetName]) {
-                    livingTargets.push(targetName);
-                }
-            }
-
-            const activeTargets = livingTargets.slice(0, 5);
+            // 1. Render Player's Active Targets
+            const activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
 
             if (activeTargets.length === 0) {
                 targetListEl.innerHTML = '<li style="color: #00e676; padding: 10px; text-align: center;">🎉 All targets eliminated!</li>';
-                return;
+            } else {
+                activeTargets.forEach(targetName => {
+                    const li = document.createElement('li');
+                    li.className = 'target-item';
+                    li.innerHTML = `
+                        <div class="target-info">
+                            <input type="checkbox" class="target-checkbox" onclick="tagTarget('${targetName}', event)">
+                            <span class="target-name">${targetName}</span>
+                        </div>
+                    `;
+                    targetListEl.appendChild(li);
+                });
             }
 
-            activeTargets.forEach(targetName => {
-                const li = document.createElement('li');
-                li.className = 'target-item';
-                
-                li.innerHTML = `
-                    <div class="target-info">
-                        <input type="checkbox" class="target-checkbox" onclick="tagTarget('${targetName}', event)">
-                        <span class="target-name">${targetName}</span>
-                    </div>
-                `;
-                
-                targetListEl.appendChild(li);
-            });
+            // 2. Render Who Is Currently Targeting You
+            const targetedBy = [];
+            for (let i = 0; i < players.length; i++) {
+                if (i === selectedPlayerIndex) continue;
+                if (globalEliminated[players[i]]) continue;
+
+                const hunterTargets = getActiveTargetsForPlayer(i);
+                if (hunterTargets.includes(playerName)) {
+                    targetedBy.push(players[i]);
+                }
+            }
+
+            if (targetedBy.length === 0) {
+                targetedByListEl.innerHTML = '<li style="color: #888; font-size: 0.8rem; padding: 6px; text-align: center;">🛡️ No active hunters targeting you!</li>';
+            } else {
+                targetedBy.forEach(hunterName => {
+                    const li = document.createElement('li');
+                    li.className = 'target-item';
+                    li.style.borderColor = 'rgba(255, 152, 0, 0.4)';
+                    li.innerHTML = `
+                        <div class="target-info">
+                            <span style="font-size: 0.9rem;">⚠️</span>
+                            <span class="target-name" style="color: #ffb74d;">${hunterName}</span>
+                        </div>
+                    `;
+                    targetedByListEl.appendChild(li);
+                });
+            }
         }
 
         function tagTarget(targetName, event) {
@@ -882,8 +929,6 @@
                     if (lastOutsideTimestamp !== null) {
                         const elapsed = now - lastOutsideTimestamp;
                         totalTimeSpentOutside += elapsed;
-                        
-                        // Sync total elapsed time to Firebase Realtime Database
                         db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
                     }
                     lastOutsideTimestamp = now;
@@ -905,7 +950,6 @@
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
-                    // Safe inside: pause tracking
                     lastOutsideTimestamp = null;
                     document.getElementById('warning-card').style.display = 'none';
                 }
