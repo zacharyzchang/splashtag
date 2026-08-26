@@ -74,11 +74,30 @@
             padding-top: 4px;
         }
 
-        /* Grace Period Warning Banner */
-        .warning-card {
+        /* Safe Zone Buffer Warning Banner */
+        .buffer-card {
             display: none;
             position: absolute;
             top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 152, 0, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid #ff9800;
+            box-shadow: 0 4px 20px rgba(255, 152, 0, 0.5);
+            text-align: center;
+            min-width: 250px;
+            animation: pulseWarning 1s infinite alternate;
+        }
+
+        /* Out of Bounds Grace Period Warning Banner */
+        .warning-card {
+            display: none;
+            position: absolute;
+            top: 155px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -90,10 +109,10 @@
             box-shadow: 0 4px 20px rgba(255, 23, 68, 0.5);
             text-align: center;
             min-width: 260px;
-            animation: pulse 1.5s infinite alternate;
+            animation: pulseWarning 1.5s infinite alternate;
         }
 
-        @keyframes pulse {
+        @keyframes pulseWarning {
             0% { transform: translateX(-50%) scale(1); }
             100% { transform: translateX(-50%) scale(1.03); }
         }
@@ -114,7 +133,7 @@
             margin-top: 2px;
         }
 
-        /* Live Elimination Announcement Banner (Bottom) */
+        /* Live Elimination Announcement Banner */
         .announcement-banner {
             display: none;
             position: absolute;
@@ -147,12 +166,13 @@
         }
 
         /* Announcements Log Bottom Tab & Drawer */
+        /* Lower z-index (1020) so sidebar (1050) covers it when open */
         .log-tab-toggle {
             position: absolute;
             bottom: 52px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1050;
+            z-index: 1020;
             background: rgba(220, 38, 38, 0.9);
             color: #fff;
             border: 1px solid #ff5252;
@@ -351,7 +371,7 @@
         .target-info {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .target-checkbox {
@@ -363,6 +383,30 @@
 
         .target-name {
             font-weight: 500;
+        }
+
+        .swap-btn {
+            background: #ff9800;
+            color: #121212;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .swap-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .last-seen-tag {
+            font-size: 0.65rem;
+            color: #aaa;
+            font-family: monospace;
+            display: block;
         }
 
         /* Testing Controls */
@@ -392,6 +436,26 @@
 
         .btn.active {
             background: #007bff;
+        }
+
+        /* Target Marker Pulse Effect */
+        @keyframes targetPulse {
+            0% { r: 9; stroke-opacity: 1; }
+            100% { r: 18; stroke-opacity: 0; }
+        }
+
+        .pulse-marker {
+            animation: targetPulse 1.5s infinite ease-out;
+        }
+
+        /* Shrinking Zone Border Dash Animation */
+        @keyframes shrinkDash {
+            to { stroke-dashoffset: -40; }
+        }
+
+        .anim-shrinking-border {
+            stroke-dasharray: 8, 8;
+            animation: shrinkDash 2s linear infinite;
         }
     </style>
 </head>
@@ -434,7 +498,13 @@
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 45/45</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 46/46</div>
+    </div>
+
+    <!-- Safe Zone Proximity Buffer Warning -->
+    <div id="buffer-card" class="buffer-card">
+        <div class="warning-title" style="color: #121212;">⚠️ Approaching Boundary!</div>
+        <div id="buffer-distance" style="font-size: 0.85rem; color: #121212; font-weight: bold;">Within 20m of safe zone edge</div>
     </div>
 
     <!-- Grace Period Countdown Warning -->
@@ -510,22 +580,29 @@
             "Baptiste Neveu", "Braedan Roberts", "Jamilee Sun", "Owen Sun", "Kaylan Sawatzky",
             "Doris Li", "Amery Gardiner", "Harrison Sellinger", "Ev Navarro", "Zoe Serdar",
             "Aidan Serdar", "Richard Guo", "Julia Kucharek", "Tiemar Tadese", "Erin Cooper",
-            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Philos Mlobela", "Zachary Chang"
+            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Philos Mlobela", "Zachary Chang",
+            "Mariah Ventress"
         ];
 
         let selectedPlayerIndex = null;
         let globalEliminated = {}; 
         let userEliminations = {}; 
+        let targetSwaps = {}; 
+        let lastSwapTimestamp = 0;
         let playerMarkers = {};
         let playerMarker = null;
         let cachedLocations = {}; 
+        let playerBreadcrumbs = {}; 
+        let breadcrumbPolylines = {};
         let isInitialLoad = true;
         let announcementLogs = [];
 
         // Cumulative Grace Period Tracker (15 Minutes Max = 900,000 ms)
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
         let totalTimeSpentOutside = 0; 
-        let lastOutsideTimestamp = null;
+        let outOfBoundsStartTimestamp = null;
+
+        const SWAP_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes target swap cooldown
 
         // Populate Player Select Dropdown
         const playerSelect = document.getElementById('player-select');
@@ -556,6 +633,15 @@
 
             db.ref('game/outOfBoundsTime/' + selectedName).on('value', (snapshot) => {
                 totalTimeSpentOutside = snapshot.val() || 0;
+            });
+
+            db.ref('game/outOfBoundsStart/' + selectedName).on('value', (snapshot) => {
+                outOfBoundsStartTimestamp = snapshot.val() || null;
+            });
+
+            db.ref('game/lastTargetSwap/' + selectedName).on('value', (snapshot) => {
+                lastSwapTimestamp = snapshot.val() || 0;
+                renderTargetList();
             });
 
             renderTargetList();
@@ -638,6 +724,11 @@
             renderTargetList();
         });
 
+        db.ref('game/swappedTargets').on('value', (snapshot) => {
+            targetSwaps = snapshot.val() || {};
+            renderTargetList();
+        });
+
         function updateRemainingPlayersCount() {
             const totalEliminated = Object.keys(globalEliminated).length;
             const remaining = players.length - totalEliminated;
@@ -666,18 +757,70 @@
             const playerName = players[playerIdx];
             if (globalEliminated[playerName]) return [];
 
+            const userSwaps = targetSwaps[playerName] || {};
             const livingTargets = [];
+
             for (let i = 0; i < players.length; i++) {
                 const targetIndex = (playerIdx + 1 + i) % players.length;
-                const targetName = players[targetIndex];
+                let targetName = players[targetIndex];
 
                 if (targetName === playerName) continue; 
-                if (!globalEliminated[targetName]) {
+                if (userSwaps[targetName]) {
+                    targetName = userSwaps[targetName]; // Use swapped alternative target
+                }
+
+                if (!globalEliminated[targetName] && !livingTargets.includes(targetName)) {
                     livingTargets.push(targetName);
                 }
             }
 
             return livingTargets.slice(0, 5);
+        }
+
+        // --- TARGET SWAP FEATURE ---
+        function swapTarget(targetToReplace) {
+            if (selectedPlayerIndex === null) return;
+            const now = Date.now();
+            const timeSinceLastSwap = now - lastSwapTimestamp;
+
+            if (timeSinceLastSwap < SWAP_COOLDOWN_MS) {
+                const remMin = Math.ceil((SWAP_COOLDOWN_MS - timeSinceLastSwap) / 60000);
+                alert(`⏳ Target swap on cooldown! Try again in ${remMin} minute(s).`);
+                return;
+            }
+
+            const myName = players[selectedPlayerIndex];
+            const activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
+
+            // Find an eligible active player not currently assigned to user
+            const availableCandidates = players.filter(p => 
+                p !== myName && 
+                !globalEliminated[p] && 
+                !activeTargets.includes(p)
+            );
+
+            if (availableCandidates.length === 0) {
+                alert("No alternative active players available to swap.");
+                return;
+            }
+
+            const newTarget = availableCandidates[Math.floor(Math.random() * availableCandidates.length)];
+
+            if (confirm(`Swap out "${targetToReplace}" for new target "${newTarget}"?`)) {
+                db.ref(`game/swappedTargets/${myName}/${targetToReplace}`).set(newTarget);
+                db.ref(`game/lastTargetSwap/${myName}`).set(now);
+                alert(`🎯 Target updated! New target: ${newTarget}`);
+            }
+        }
+
+        function formatLastSeen(timestamp) {
+            if (!timestamp) return "Never";
+            const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+            if (diffSec < 60) return `${diffSec}s ago`;
+            const diffMin = Math.floor(diffSec / 60);
+            if (diffMin < 60) return `${diffMin}m ago`;
+            const diffHr = Math.floor(diffMin / 60);
+            return `${diffHr}h ago`;
         }
 
         function renderTargetList() {
@@ -706,6 +849,8 @@
 
             // 1. Render Player's Active Targets
             const activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
+            const now = Date.now();
+            const canSwap = (now - lastSwapTimestamp) >= SWAP_COOLDOWN_MS;
 
             if (activeTargets.length === 0) {
                 targetListEl.innerHTML = '<li style="color: #00e676; padding: 10px; text-align: center;">🎉 All targets eliminated!</li>';
@@ -713,11 +858,18 @@
                 activeTargets.forEach(targetName => {
                     const li = document.createElement('li');
                     li.className = 'target-item';
+                    const targetLoc = cachedLocations[targetName];
+                    const lastSeenStr = targetLoc ? formatLastSeen(targetLoc.timestamp) : "No GPS";
+
                     li.innerHTML = `
                         <div class="target-info">
                             <input type="checkbox" class="target-checkbox" onclick="tagTarget('${targetName}', event)">
-                            <span class="target-name">${targetName}</span>
+                            <div>
+                                <span class="target-name">${targetName}</span>
+                                <span class="last-seen-tag">Seen: ${lastSeenStr}</span>
+                            </div>
                         </div>
+                        <button class="swap-btn" ${!canSwap ? 'disabled' : ''} onclick="swapTarget('${targetName}')">Swap 🔄</button>
                     `;
                     targetListEl.appendChild(li);
                 });
@@ -742,10 +894,16 @@
                     const li = document.createElement('li');
                     li.className = 'target-item';
                     li.style.borderColor = 'rgba(255, 152, 0, 0.4)';
+                    const hunterLoc = cachedLocations[hunterName];
+                    const lastSeenStr = hunterLoc ? formatLastSeen(hunterLoc.timestamp) : "No GPS";
+
                     li.innerHTML = `
                         <div class="target-info">
                             <span style="font-size: 0.9rem;">⚠️</span>
-                            <span class="target-name" style="color: #ffb74d;">${hunterName}</span>
+                            <div>
+                                <span class="target-name" style="color: #ffb74d;">${hunterName}</span>
+                                <span class="last-seen-tag">Seen: ${lastSeenStr}</span>
+                            </div>
                         </div>
                     `;
                     targetedByListEl.appendChild(li);
@@ -890,6 +1048,7 @@
         };
 
         let activePolygon = null;
+        let nextZonePolygon = null;
         let manualOverride = false;
         let currentPhaseNum = 1;
 
@@ -908,12 +1067,33 @@
             return inside;
         }
 
-        // --- ZONE BOUNDARY & FIREBASE SYNCED GRACE PERIOD CHECK ---
+        // --- DISTANCE FROM POINT TO POLYGON EDGE (SAFE ZONE BUFFER WARNING) ---
+        function getShortestDistanceToBoundary(point, vs) {
+            let minDistance = Infinity;
+            for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                const p1 = L.latLng(vs[i][0], vs[i][1]);
+                const p2 = L.latLng(vs[j][0], vs[j][1]);
+                const p = L.latLng(point[0], point[1]);
+
+                // Distance approximation to line segment
+                const d = L.LineUtil.pointToSegmentDistance(
+                    map.latLngToLayerPoint(p),
+                    map.latLngToLayerPoint(p1),
+                    map.latLngToLayerPoint(p2)
+                );
+                if (d < minDistance) minDistance = d;
+            }
+            // Rough pixel to meter conversion scale based on zoom level 15
+            return Math.round(minDistance * 0.8);
+        }
+
+        // --- ZONE BOUNDARY & PERSISTENT OUT-OF-BOUNDS TIMER ---
         function checkZoneBoundaries(phaseNum) {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
             if (globalEliminated[myName]) {
                 document.getElementById('warning-card').style.display = 'none';
+                document.getElementById('buffer-card').style.display = 'none';
                 return;
             }
 
@@ -926,14 +1106,16 @@
                 const now = Date.now();
 
                 if (!isInside) {
-                    if (lastOutsideTimestamp !== null) {
-                        const elapsed = now - lastOutsideTimestamp;
-                        totalTimeSpentOutside += elapsed;
-                        db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
-                    }
-                    lastOutsideTimestamp = now;
+                    document.getElementById('buffer-card').style.display = 'none';
 
-                    const remainingMs = TOTAL_GRACE_PERIOD - totalTimeSpentOutside;
+                    if (!outOfBoundsStartTimestamp) {
+                        outOfBoundsStartTimestamp = now;
+                        db.ref('game/outOfBoundsStart/' + myName).set(now);
+                    }
+
+                    const currentSessionElapsed = now - outOfBoundsStartTimestamp;
+                    const accumulatedTime = totalTimeSpentOutside + currentSessionElapsed;
+                    const remainingMs = TOTAL_GRACE_PERIOD - accumulatedTime;
 
                     if (remainingMs > 0) {
                         const minutes = Math.floor(remainingMs / 60000);
@@ -944,21 +1126,39 @@
                         document.getElementById('warning-card').style.display = 'block';
                     } else {
                         document.getElementById('warning-card').style.display = 'none';
-                        lastOutsideTimestamp = null;
+                        db.ref('game/outOfBoundsStart/' + myName).remove();
+                        db.ref('game/outOfBoundsTime/' + myName).set(TOTAL_GRACE_PERIOD);
                         db.ref('game/eliminatedBy/' + myName).set("Out of Bounds");
                         db.ref('game/eliminated/' + myName).set(true);
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
-                    lastOutsideTimestamp = null;
+                    if (outOfBoundsStartTimestamp) {
+                        const elapsed = now - outOfBoundsStartTimestamp;
+                        totalTimeSpentOutside += elapsed;
+                        db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
+                        db.ref('game/outOfBoundsStart/' + myName).remove();
+                        outOfBoundsStartTimestamp = null;
+                    }
                     document.getElementById('warning-card').style.display = 'none';
+
+                    // --- SAFE ZONE BUFFER PROXIMITY WARNING (20 meters) ---
+                    const approxDistMeters = getShortestDistanceToBoundary(userPoint, currentZoneCoords);
+                    if (approxDistMeters <= 20) {
+                        document.getElementById('buffer-distance').innerText = `⚠️ ~${approxDistMeters}m from safe zone edge!`;
+                        document.getElementById('buffer-card').style.display = 'block';
+                    } else {
+                        document.getElementById('buffer-card').style.display = 'none';
+                    }
                 }
             }
         }
 
+        // --- RENDER ZONES & ANIMATED SHRINKING BOUNDARY ---
         function renderZone(phaseNum) {
             currentPhaseNum = phaseNum;
             if (activePolygon) map.removeLayer(activePolygon);
+            if (nextZonePolygon) map.removeLayer(nextZonePolygon);
 
             const zone = zones[phaseNum];
             activePolygon = L.polygon(zone.coords, {
@@ -967,6 +1167,19 @@
                 fillOpacity: 0.35,
                 weight: 3
             }).addTo(map);
+
+            // Render visual animated shrinking ring for the next upcoming phase boundary
+            const nextPhaseNum = phaseNum < 4 ? phaseNum + 1 : null;
+            if (nextPhaseNum) {
+                const nextZone = zones[nextPhaseNum];
+                nextZonePolygon = L.polygon(nextZone.coords, {
+                    color: nextZone.color,
+                    fillColor: "transparent",
+                    weight: 3,
+                    dashArray: "8, 8",
+                    className: "anim-shrinking-border"
+                }).addTo(map);
+            }
 
             document.getElementById('phase-label').innerText = zone.name;
             document.getElementById('phase-label').style.color = zone.color;
@@ -1010,33 +1223,104 @@
             }
         }
 
-        // --- LOCATION SHARING & MARKER RENDERING ---
+        // --- LOCATION SHARING, BREADCRUMBS & MARKER RENDERING ---
         let lastFirebaseUpdate = 0;
-        const UPDATE_INTERVAL = 10 * 60 * 1000; // 10 minutes
+        const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+        function updateBreadcrumbs(name, lat, lng) {
+            if (!playerBreadcrumbs[name]) playerBreadcrumbs[name] = [];
+            
+            const history = playerBreadcrumbs[name];
+            // Only add point if moved significantly
+            if (history.length === 0 || L.latLng(lat, lng).distanceTo(L.latLng(history[history.length - 1])) > 5) {
+                history.push([lat, lng]);
+                if (history.length > 8) history.shift(); // Keep last 8 breadcrumb points
+            }
+
+            // Draw breadcrumb path on map
+            if (breadcrumbPolylines[name]) {
+                breadcrumbPolylines[name].setLatLngs(playerBreadcrumbs[name]);
+            } else {
+                const pathColor = (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) ? "#00b0ff" : "#ff9000";
+                breadcrumbPolylines[name] = L.polyline(playerBreadcrumbs[name], {
+                    color: pathColor,
+                    weight: 2,
+                    opacity: 0.6,
+                    dashArray: "4, 4"
+                }).addTo(map);
+            }
+        }
 
         function renderAllPlayerMarkers() {
+            let activeTargets = [];
+            let huntersTargetingMe = [];
+
+            if (selectedPlayerIndex !== null) {
+                activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
+                
+                const myName = players[selectedPlayerIndex];
+                for (let i = 0; i < players.length; i++) {
+                    if (i === selectedPlayerIndex || globalEliminated[players[i]]) continue;
+                    const hunterTargets = getActiveTargetsForPlayer(i);
+                    if (hunterTargets.includes(myName)) {
+                        huntersTargetingMe.push(players[i]);
+                    }
+                }
+            }
+
             Object.keys(cachedLocations).forEach(name => {
                 const data = cachedLocations[name];
                 
+                updateBreadcrumbs(name, data.lat, data.lng);
+
                 if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) return;
 
                 const isEliminated = !!globalEliminated[name];
-                const markerColor = isEliminated ? "#ff5252" : "#00e676";
-                const statusLabel = isEliminated ? " (ELIMINATED)" : " (ACTIVE)";
+                const isTarget = activeTargets.includes(name);
+                const isHunter = huntersTargetingMe.includes(name);
+
+                let markerColor = "#00e676"; // Default active
+                let radius = 7;
+                let weight = 2;
+                let strokeColor = "#ffffff";
+                let statusLabel = " (ACTIVE)";
+                let className = "";
+
+                if (isEliminated) {
+                    markerColor = "#ff5252";
+                    statusLabel = " (ELIMINATED)";
+                } else if (isTarget) {
+                    markerColor = "#ff9000"; // Bright Orange for targets
+                    strokeColor = "#ffff00";
+                    radius = 10;
+                    weight = 3;
+                    statusLabel = " 🎯 [YOUR TARGET]";
+                    className = "pulse-marker";
+                } else if (isHunter) {
+                    markerColor = "#e040fb"; // Neon Purple/Magenta for hunters targeting you
+                    strokeColor = "#ffffff";
+                    radius = 9;
+                    weight = 3;
+                    statusLabel = " ⚠️ [TARGETING YOU]";
+                }
+
+                const lastSeenText = formatLastSeen(data.timestamp);
+                const popupContent = `<b>${name}</b>${statusLabel}<br/><span style="font-size: 0.75rem; color: #bbb;">Last seen: ${lastSeenText}</span>`;
 
                 if (playerMarkers[name]) {
                     playerMarkers[name].setLatLng([data.lat, data.lng]);
-                    playerMarkers[name].setStyle({ fillColor: markerColor });
-                    playerMarkers[name].setPopupContent(`<b>${name}</b>${statusLabel}`);
+                    playerMarkers[name].setStyle({ fillColor: markerColor, color: strokeColor, radius: radius, weight: weight });
+                    playerMarkers[name].setPopupContent(popupContent);
                 } else {
                     playerMarkers[name] = L.circleMarker([data.lat, data.lng], {
-                        radius: 7,
+                        radius: radius,
                         fillColor: markerColor,
-                        color: "#ffffff",
-                        weight: 2,
+                        color: strokeColor,
+                        weight: weight,
                         opacity: 1,
-                        fillOpacity: 0.9
-                    }).addTo(map).bindPopup(`<b>${name}</b>${statusLabel}`);
+                        fillOpacity: 0.9,
+                        className: className
+                    }).addTo(map).bindPopup(popupContent);
                 }
             });
 
@@ -1052,6 +1336,7 @@
         db.ref('game/locations').on('value', (snapshot) => {
             cachedLocations = snapshot.val() || {};
             renderAllPlayerMarkers();
+            renderTargetList();
         });
 
         // Watch device GPS
@@ -1078,6 +1363,10 @@
                     } else {
                         playerMarker.setLatLng([lat, lng]);
                         playerMarker.setStyle({ fillColor: selfColor });
+                    }
+
+                    if (myName) {
+                        updateBreadcrumbs(myName, lat, lng);
                     }
 
                     checkZoneBoundaries(currentPhaseNum);
