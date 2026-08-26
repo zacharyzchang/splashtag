@@ -582,17 +582,18 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Shuffled Player Roster
         const players = [
-            "Shaianne C.", "Sydney M.", "Ryan B.", "Eno E.", "Acacia C.",
-            "Kylee F.", "Sofia V.", "Lake", "Janz", "Aavin I.",
-            "Micaila L.", "Asher C.", "Betty Y.", "Jacob K.", "Ethan P.",
-            "Simon O.", "Joshua J.", "Obed M.", "Soukina H.", "Mataya O.",
-            "Bobby Y.", "Hannah B.", "Chenay W.", "Javier N.", "Liv N.",
-            "Baptiste N.", "Braedan R.", "Jamilee S.", "Owen S.", "Kaylan S.",
-            "Doris L.", "Amery G.", "Harrison S.", "Ev N.", "Zoe S.",
-            "Aidan S.", "Richard G.", "Julia K.", "Tiemar T.", "Erin C.",
-            "Exaucé M.", "Shawn T.", "Felipe G.", "Philos M.", "Zachary C.",
-            "Mariah V.", "Brenden S.", "Mia S."
+            "Janz", "Aavin I.", "Baptiste N.", "Mia S.", "Tiemar T.",
+            "Julia K.", "Eno E.", "Ethan P.", "Harrison S.", "Shaianne C.",
+            "Mataya O.", "Philos M.", "Jamilee S.", "Asher C.", "Doris L.",
+            "Simon O.", "Zachary C.", "Hannah B.", "Erin C.", "Joshua J.",
+            "Acacia C.", "Amery G.", "Shawn T.", "Kylee F.", "Obed M.",
+            "Bobby Y.", "Braedan R.", "Richard G.", "Ev N.", "Felipe G.",
+            "Liv N.", "Exaucé M.", "Sydney M.", "Micaila L.", "Soukina H.",
+            "Lake", "Betty Y.", "Brenden S.", "Kaylan S.", "Mariah V.",
+            "Chenay W.", "Jacob K.", "Owen S.", "Javier N.", "Ryan B.",
+            "Zoe S.", "Aidan S.", "Sofia V."
         ];
 
         let selectedPlayerIndex = null;
@@ -603,6 +604,7 @@
         let cachedLocations = {}; 
         let isInitialLoad = true;
         let announcementLogs = [];
+        let gameCommencedAnnounced = false;
         let gameOverAnnounced = false;
 
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
@@ -670,7 +672,10 @@
             let htmlMsg = "";
             let logMsg = "";
 
-            if (cause === "GAME_OVER") {
+            if (cause === "GAME_COMMENCED") {
+                htmlMsg = `🚀 <b>GAME COMMENCED!</b> The match is officially live!`;
+                logMsg = `🚀 <b>GAME COMMENCED!</b> The match is officially live.`;
+            } else if (cause === "GAME_OVER") {
                 htmlMsg = `🏆 <b>GAME OVER!</b> The game has officially ended!`;
                 logMsg = `🏆 <b>GAME OVER!</b> The game has officially ended.`;
             } else if (cause === "Out of Bounds") {
@@ -1146,13 +1151,26 @@
 
         function updateGame() {
             const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth(); // 0-indexed (8 = September)
+            const date = now.getDate();
             const minutes = now.getHours() * 60 + now.getMinutes();
+
             document.getElementById('time-label').innerText = `Clock: ${now.toLocaleTimeString()}`;
 
-            // Trigger 6:15 PM Game Over Announcement
-            if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
-                gameOverAnnounced = true;
-                triggerAnnouncement("EVERYONE", "GAME_OVER");
+            // Check specifically for September 7, 2026
+            if (year === 2026 && month === 8 && date === 7) {
+                // Game Commencement at 2:30 PM (14:30 = 870 mins)
+                if (minutes >= 14 * 60 + 30 && !gameCommencedAnnounced) {
+                    gameCommencedAnnounced = true;
+                    triggerAnnouncement("ALL PLAYERS", "GAME_COMMENCED");
+                }
+
+                // Game Over at 6:15 PM (18:15 = 1095 mins)
+                if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
+                    gameOverAnnounced = true;
+                    triggerAnnouncement("EVERYONE", "GAME_OVER");
+                }
             }
 
             const activePhase = getPhaseByTime();
@@ -1286,7 +1304,6 @@
                     const isSelfEliminated = myName ? !!globalEliminated[myName] : false;
                     const selfColor = isSelfEliminated ? "#ff5252" : "#00b0ff";
 
-                    // Fix: Remove pre-existing player marker before re-instantiating to prevent duplicate rendering
                     if (playerMarker) {
                         map.removeLayer(playerMarker);
                         playerMarker = null;
