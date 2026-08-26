@@ -166,7 +166,6 @@
         }
 
         /* Announcements Log Bottom Tab & Drawer */
-        /* Lower z-index (1020) so sidebar (1050) covers it when open */
         .log-tab-toggle {
             position: absolute;
             bottom: 52px;
@@ -291,7 +290,7 @@
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
             overflow-y: auto;
         }
 
@@ -385,28 +384,29 @@
             font-weight: 500;
         }
 
-        .swap-btn {
-            background: #ff9800;
-            color: #121212;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        .swap-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
         .last-seen-tag {
             font-size: 0.65rem;
             color: #aaa;
             font-family: monospace;
             display: block;
+        }
+
+        .sidebar-footer-btn {
+            margin-top: auto;
+            width: 100%;
+            padding: 12px;
+            background: #ff9800;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         /* Testing Controls */
@@ -447,16 +447,6 @@
         .pulse-marker {
             animation: targetPulse 1.5s infinite ease-out;
         }
-
-        /* Shrinking Zone Border Dash Animation */
-        @keyframes shrinkDash {
-            to { stroke-dashoffset: -40; }
-        }
-
-        .anim-shrinking-border {
-            stroke-dasharray: 8, 8;
-            animation: shrinkDash 2s linear infinite;
-        }
     </style>
 </head>
 <body>
@@ -492,16 +482,21 @@
                 <li style="color: #666; font-size: 0.8rem;">Select your name above.</li>
             </ul>
         </div>
+
+        <!-- Questions / Help Button -->
+        <button class="sidebar-footer-btn" onclick="promptQuestion()">
+            ❓ Ask Question / Help
+        </button>
     </div>
 
     <div class="status-card">
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 46/46</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 48/48</div>
     </div>
 
-    <!-- Safe Zone Proximity Buffer Warning -->
+    <!-- Safe Zone Buffer Warning -->
     <div id="buffer-card" class="buffer-card">
         <div class="warning-title" style="color: #121212;">⚠️ Approaching Boundary!</div>
         <div id="buffer-distance" style="font-size: 0.85rem; color: #121212; font-weight: bold;">Within 20m of safe zone edge</div>
@@ -543,12 +538,13 @@
 
     <!-- Elimination Confirmation Popup -->
     <div id="confirm-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
-        <div style="background: #1e1e1e; border: 1px solid #ff5252; padding: 24px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+        <div style="background: #1e1e1e; border: 1px solid #ff5252; padding: 24px; border-radius: 16px; width: 85%; max-width: 340px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
             <h3 style="color: #ff5252; margin-top: 0;">TAG CLAIMED!</h3>
             <p id="confirm-msg" style="font-size: 0.95rem; color: #ddd; margin-bottom: 20px;">Someone tagged you!</p>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button onclick="respondToTag(false)" style="flex: 1; padding: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
-                <button onclick="respondToTag(true)" style="flex: 1; padding: 12px; background: #ff5252; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Confirm</button>
+            <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                <button onclick="respondToTag('cancel')" style="flex: 1; padding: 10px; background: #333; color: #fff; border: 1px solid #555; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
+                <button onclick="respondToTag('dispute')" style="flex: 1; padding: 10px; background: #ff9800; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Dispute</button>
+                <button onclick="respondToTag('confirm')" style="width: 100%; margin-top: 4px; padding: 10px; background: #ff5252; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Confirm Tag</button>
             </div>
         </div>
     </div>
@@ -556,7 +552,23 @@
     <div id="map"></div>
 
     <script>
-        // Splash Tag Deer Lake Firebase Credentials
+        // Telegram Configuration Integrated
+        const TELEGRAM_BOT_TOKEN = '8946760235:AAGswijFCEXyJlooD6z3woBIFgf8fvPm7AE';
+        const TELEGRAM_CHAT_ID = '8390992396';
+
+        function sendTelegramNotification(messageText) {
+            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: messageText,
+                    parse_mode: 'HTML'
+                })
+            }).catch(err => console.error("Telegram delivery error:", err));
+        }
+
+        // Firebase Credentials
         const firebaseConfig = {
             apiKey: "AIzaSyCGIaddkRmlTf8Hn0Bkb5S_Agel20CgCZU",
             authDomain: "splash-tag-deer-lake.firebaseapp.com",
@@ -570,41 +582,33 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Player Roster
         const players = [
-            "Shaianne Casasis", "Sydney Myung", "Ryan Basu", "Eno Efe", "Acacia Chang",
-            "Kylee Foo", "Sofia Villanueva", "Lake", "Janz", "Aavin Izadi",
-            "Micaila Li", "Asher Campbell", "Betty Yang", "Jacob Kissie", "Ethan Pang",
-            "Simon Otsuji-Pickell", "Joshua Jung", "Obed Manzi", "Soukina Hammoud", "Mataya Opong",
-            "Bobby Yang", "Hannah Buch", "Chenay Wong", "Javier Neveu", "Liv Neveu",
-            "Baptiste Neveu", "Braedan Roberts", "Jamilee Sun", "Owen Sun", "Kaylan Sawatzky",
-            "Doris Li", "Amery Gardiner", "Harrison Sellinger", "Ev Navarro", "Zoe Serdar",
-            "Aidan Serdar", "Richard Guo", "Julia Kucharek", "Tiemar Tadese", "Erin Cooper",
-            "Exaucé Meya", "Shawn Tanaka", "Felipe Garing", "Philos Mlobela", "Zachary Chang",
-            "Mariah Ventress"
+            "Shaianne C.", "Sydney M.", "Ryan B.", "Eno E.", "Acacia C.",
+            "Kylee F.", "Sofia V.", "Lake", "Janz", "Aavin I.",
+            "Micaila L.", "Asher C.", "Betty Y.", "Jacob K.", "Ethan P.",
+            "Simon O.", "Joshua J.", "Obed M.", "Soukina H.", "Mataya O.",
+            "Bobby Y.", "Hannah B.", "Chenay W.", "Javier N.", "Liv N.",
+            "Baptiste N.", "Braedan R.", "Jamilee S.", "Owen S.", "Kaylan S.",
+            "Doris L.", "Amery G.", "Harrison S.", "Ev N.", "Zoe S.",
+            "Aidan S.", "Richard G.", "Julia K.", "Tiemar T.", "Erin C.",
+            "Exaucé M.", "Shawn T.", "Felipe G.", "Philos M.", "Zachary C.",
+            "Mariah V.", "Brenden S.", "Mia S."
         ];
 
         let selectedPlayerIndex = null;
         let globalEliminated = {}; 
         let userEliminations = {}; 
-        let targetSwaps = {}; 
-        let lastSwapTimestamp = 0;
         let playerMarkers = {};
         let playerMarker = null;
         let cachedLocations = {}; 
-        let playerBreadcrumbs = {}; 
-        let breadcrumbPolylines = {};
         let isInitialLoad = true;
         let announcementLogs = [];
+        let gameOverAnnounced = false;
 
-        // Cumulative Grace Period Tracker (15 Minutes Max = 900,000 ms)
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
         let totalTimeSpentOutside = 0; 
         let outOfBoundsStartTimestamp = null;
 
-        const SWAP_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes target swap cooldown
-
-        // Populate Player Select Dropdown
         const playerSelect = document.getElementById('player-select');
         players.forEach((player, index) => {
             const opt = document.createElement('option');
@@ -639,16 +643,26 @@
                 outOfBoundsStartTimestamp = snapshot.val() || null;
             });
 
-            db.ref('game/lastTargetSwap/' + selectedName).on('value', (snapshot) => {
-                lastSwapTimestamp = snapshot.val() || 0;
-                renderTargetList();
-            });
-
             renderTargetList();
             renderAllPlayerMarkers();
         }
 
-        // --- ANNOUNCEMENT BANNER & LOG HISTORY ---
+        function promptQuestion() {
+            if (selectedPlayerIndex === null) {
+                alert("Please select your name from the dropdown first!");
+                return;
+            }
+
+            const sender = players[selectedPlayerIndex];
+            const msg = prompt(`Ask a question or request admin help (${sender}):`);
+            
+            if (msg && msg.trim() !== "") {
+                const fullMsg = `❓ <b>QUESTION / HELP REQUEST</b>\n<b>From:</b> ${sender}\n<b>Message:</b> ${msg.trim()}`;
+                sendTelegramNotification(fullMsg);
+                alert("Your question has been sent to the organizer!");
+            }
+        }
+
         function triggerAnnouncement(victim, cause) {
             const banner = document.getElementById('announcement-banner');
             const textEl = document.getElementById('announcement-text');
@@ -656,7 +670,10 @@
             let htmlMsg = "";
             let logMsg = "";
 
-            if (cause === "Out of Bounds") {
+            if (cause === "GAME_OVER") {
+                htmlMsg = `🏆 <b>GAME OVER!</b> The game has officially ended!`;
+                logMsg = `🏆 <b>GAME OVER!</b> The game has officially ended.`;
+            } else if (cause === "Out of Bounds") {
                 htmlMsg = `🚨 <b>${victim}</b> was eliminated for being <b>Out of Bounds</b>!`;
                 logMsg = `🚨 <b>${victim}</b> was eliminated for being Out of Bounds`;
             } else {
@@ -699,7 +716,6 @@
             });
         }
 
-        // --- REALTIME ELIMINATIONS & CONFIRMED TAGS LISTENER ---
         db.ref('game/eliminated').on('value', (snapshot) => {
             const newEliminated = snapshot.val() || {};
 
@@ -724,18 +740,12 @@
             renderTargetList();
         });
 
-        db.ref('game/swappedTargets').on('value', (snapshot) => {
-            targetSwaps = snapshot.val() || {};
-            renderTargetList();
-        });
-
         function updateRemainingPlayersCount() {
             const totalEliminated = Object.keys(globalEliminated).length;
             const remaining = players.length - totalEliminated;
             document.getElementById('players-remaining-label').innerText = `Players Remaining: ${remaining}/${players.length}`;
         }
 
-        // --- LISTEN FOR PENDING TAGS FOR CURRENT PLAYER ---
         db.ref('game/pendingTags').on('value', (snapshot) => {
             if (selectedPlayerIndex === null) return;
 
@@ -744,7 +754,7 @@
 
             if (pending[myName]) {
                 const tagData = pending[myName];
-                document.getElementById('confirm-msg').innerText = `${tagData.taggedBy} marked you as eliminated! Confirm?`;
+                document.getElementById('confirm-msg').innerText = `${tagData.taggedBy} marked you as eliminated!`;
                 document.getElementById('confirm-modal').setAttribute('data-attacker', tagData.taggedBy);
                 document.getElementById('confirm-modal').style.display = 'flex';
             } else {
@@ -752,22 +762,17 @@
             }
         });
 
-        // Get active targets for any given player index
         function getActiveTargetsForPlayer(playerIdx) {
             const playerName = players[playerIdx];
             if (globalEliminated[playerName]) return [];
 
-            const userSwaps = targetSwaps[playerName] || {};
             const livingTargets = [];
 
             for (let i = 0; i < players.length; i++) {
                 const targetIndex = (playerIdx + 1 + i) % players.length;
-                let targetName = players[targetIndex];
+                const targetName = players[targetIndex];
 
-                if (targetName === playerName) continue; 
-                if (userSwaps[targetName]) {
-                    targetName = userSwaps[targetName]; // Use swapped alternative target
-                }
+                if (targetName === playerName) continue;
 
                 if (!globalEliminated[targetName] && !livingTargets.includes(targetName)) {
                     livingTargets.push(targetName);
@@ -775,42 +780,6 @@
             }
 
             return livingTargets.slice(0, 5);
-        }
-
-        // --- TARGET SWAP FEATURE ---
-        function swapTarget(targetToReplace) {
-            if (selectedPlayerIndex === null) return;
-            const now = Date.now();
-            const timeSinceLastSwap = now - lastSwapTimestamp;
-
-            if (timeSinceLastSwap < SWAP_COOLDOWN_MS) {
-                const remMin = Math.ceil((SWAP_COOLDOWN_MS - timeSinceLastSwap) / 60000);
-                alert(`⏳ Target swap on cooldown! Try again in ${remMin} minute(s).`);
-                return;
-            }
-
-            const myName = players[selectedPlayerIndex];
-            const activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
-
-            // Find an eligible active player not currently assigned to user
-            const availableCandidates = players.filter(p => 
-                p !== myName && 
-                !globalEliminated[p] && 
-                !activeTargets.includes(p)
-            );
-
-            if (availableCandidates.length === 0) {
-                alert("No alternative active players available to swap.");
-                return;
-            }
-
-            const newTarget = availableCandidates[Math.floor(Math.random() * availableCandidates.length)];
-
-            if (confirm(`Swap out "${targetToReplace}" for new target "${newTarget}"?`)) {
-                db.ref(`game/swappedTargets/${myName}/${targetToReplace}`).set(newTarget);
-                db.ref(`game/lastTargetSwap/${myName}`).set(now);
-                alert(`🎯 Target updated! New target: ${newTarget}`);
-            }
         }
 
         function formatLastSeen(timestamp) {
@@ -847,10 +816,7 @@
                 return;
             }
 
-            // 1. Render Player's Active Targets
             const activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
-            const now = Date.now();
-            const canSwap = (now - lastSwapTimestamp) >= SWAP_COOLDOWN_MS;
 
             if (activeTargets.length === 0) {
                 targetListEl.innerHTML = '<li style="color: #00e676; padding: 10px; text-align: center;">🎉 All targets eliminated!</li>';
@@ -869,13 +835,11 @@
                                 <span class="last-seen-tag">Seen: ${lastSeenStr}</span>
                             </div>
                         </div>
-                        <button class="swap-btn" ${!canSwap ? 'disabled' : ''} onclick="swapTarget('${targetName}')">Swap 🔄</button>
                     `;
                     targetListEl.appendChild(li);
                 });
             }
 
-            // 2. Render Who Is Currently Targeting You
             const targetedBy = [];
             for (let i = 0; i < players.length; i++) {
                 if (i === selectedPlayerIndex) continue;
@@ -915,7 +879,6 @@
             event.preventDefault();
             if (selectedPlayerIndex === null) return;
 
-            // Check if current user is out of bounds
             if (playerMarker) {
                 const currentLatLng = playerMarker.getLatLng();
                 const userPoint = [currentLatLng.lat, currentLatLng.lng];
@@ -938,17 +901,26 @@
             alert(`Tag request sent to ${targetName}! Awaiting their confirmation.`);
         }
 
-        function respondToTag(confirmed) {
+        function respondToTag(action) {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
             const modal = document.getElementById('confirm-modal');
             const attackerName = modal.getAttribute('data-attacker');
 
-            if (confirmed) {
+            if (action === 'confirm') {
                 if (attackerName) {
                     db.ref('game/eliminatedBy/' + myName).set(attackerName);
                 }
                 db.ref('game/eliminated/' + myName).set(true);
+                db.ref('game/pendingTags/' + myName).remove();
+                modal.style.display = 'none';
+            } else if (action === 'dispute') {
+                const reason = prompt(`Please enter your reason for disputing the tag from ${attackerName}:`);
+                if (reason && reason.trim() !== "") {
+                    const disputeMsg = `⚠️ <b>TAG DISPUTE RAISED</b>\n<b>Target (Defender):</b> ${myName}\n<b>Claimed Hunter:</b> ${attackerName}\n<b>Reason:</b> ${reason.trim()}`;
+                    sendTelegramNotification(disputeMsg);
+                    alert("Dispute sent to the organizer! The tag remains unconfirmed for now.");
+                }
                 db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             } else {
@@ -957,7 +929,6 @@
             }
         }
 
-        // --- MAP & SAFE ZONES ---
         const map = L.map('map', { zoomControl: false }).setView([49.2365, -122.9730], 15);
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -1048,11 +1019,9 @@
         };
 
         let activePolygon = null;
-        let nextZonePolygon = null;
         let manualOverride = false;
         let currentPhaseNum = 1;
 
-        // --- POINT IN POLYGON ALGORITHM ---
         function isPointInPolygon(point, vs) {
             const x = point[0], y = point[1];
             let inside = false;
@@ -1067,7 +1036,6 @@
             return inside;
         }
 
-        // --- DISTANCE FROM POINT TO POLYGON EDGE (SAFE ZONE BUFFER WARNING) ---
         function getShortestDistanceToBoundary(point, vs) {
             let minDistance = Infinity;
             for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
@@ -1075,7 +1043,6 @@
                 const p2 = L.latLng(vs[j][0], vs[j][1]);
                 const p = L.latLng(point[0], point[1]);
 
-                // Distance approximation to line segment
                 const d = L.LineUtil.pointToSegmentDistance(
                     map.latLngToLayerPoint(p),
                     map.latLngToLayerPoint(p1),
@@ -1083,11 +1050,9 @@
                 );
                 if (d < minDistance) minDistance = d;
             }
-            // Rough pixel to meter conversion scale based on zoom level 15
             return Math.round(minDistance * 0.8);
         }
 
-        // --- ZONE BOUNDARY & PERSISTENT OUT-OF-BOUNDS TIMER ---
         function checkZoneBoundaries(phaseNum) {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
@@ -1142,7 +1107,6 @@
                     }
                     document.getElementById('warning-card').style.display = 'none';
 
-                    // --- SAFE ZONE BUFFER PROXIMITY WARNING (20 meters) ---
                     const approxDistMeters = getShortestDistanceToBoundary(userPoint, currentZoneCoords);
                     if (approxDistMeters <= 20) {
                         document.getElementById('buffer-distance').innerText = `⚠️ ~${approxDistMeters}m from safe zone edge!`;
@@ -1154,11 +1118,9 @@
             }
         }
 
-        // --- RENDER ZONES & ANIMATED SHRINKING BOUNDARY ---
         function renderZone(phaseNum) {
             currentPhaseNum = phaseNum;
             if (activePolygon) map.removeLayer(activePolygon);
-            if (nextZonePolygon) map.removeLayer(nextZonePolygon);
 
             const zone = zones[phaseNum];
             activePolygon = L.polygon(zone.coords, {
@@ -1167,19 +1129,6 @@
                 fillOpacity: 0.35,
                 weight: 3
             }).addTo(map);
-
-            // Render visual animated shrinking ring for the next upcoming phase boundary
-            const nextPhaseNum = phaseNum < 4 ? phaseNum + 1 : null;
-            if (nextPhaseNum) {
-                const nextZone = zones[nextPhaseNum];
-                nextZonePolygon = L.polygon(nextZone.coords, {
-                    color: nextZone.color,
-                    fillColor: "transparent",
-                    weight: 3,
-                    dashArray: "8, 8",
-                    className: "anim-shrinking-border"
-                }).addTo(map);
-            }
 
             document.getElementById('phase-label').innerText = zone.name;
             document.getElementById('phase-label').style.color = zone.color;
@@ -1197,7 +1146,14 @@
 
         function updateGame() {
             const now = new Date();
+            const minutes = now.getHours() * 60 + now.getMinutes();
             document.getElementById('time-label').innerText = `Clock: ${now.toLocaleTimeString()}`;
+
+            // Trigger 6:15 PM Game Over Announcement
+            if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
+                gameOverAnnounced = true;
+                triggerAnnouncement("EVERYONE", "GAME_OVER");
+            }
 
             const activePhase = getPhaseByTime();
             if (!manualOverride) {
@@ -1223,33 +1179,8 @@
             }
         }
 
-        // --- LOCATION SHARING, BREADCRUMBS & MARKER RENDERING ---
         let lastFirebaseUpdate = 0;
-        const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
-
-        function updateBreadcrumbs(name, lat, lng) {
-            if (!playerBreadcrumbs[name]) playerBreadcrumbs[name] = [];
-            
-            const history = playerBreadcrumbs[name];
-            // Only add point if moved significantly
-            if (history.length === 0 || L.latLng(lat, lng).distanceTo(L.latLng(history[history.length - 1])) > 5) {
-                history.push([lat, lng]);
-                if (history.length > 8) history.shift(); // Keep last 8 breadcrumb points
-            }
-
-            // Draw breadcrumb path on map
-            if (breadcrumbPolylines[name]) {
-                breadcrumbPolylines[name].setLatLngs(playerBreadcrumbs[name]);
-            } else {
-                const pathColor = (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) ? "#00b0ff" : "#ff9000";
-                breadcrumbPolylines[name] = L.polyline(playerBreadcrumbs[name], {
-                    color: pathColor,
-                    weight: 2,
-                    opacity: 0.6,
-                    dashArray: "4, 4"
-                }).addTo(map);
-            }
-        }
+        const UPDATE_INTERVAL = 5 * 60 * 1000;
 
         function renderAllPlayerMarkers() {
             let activeTargets = [];
@@ -1270,16 +1201,21 @@
 
             Object.keys(cachedLocations).forEach(name => {
                 const data = cachedLocations[name];
-                
-                updateBreadcrumbs(name, data.lat, data.lng);
 
-                if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) return;
+                // Skip rendering own marker in player iteration to prevent duplicated markers
+                if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) {
+                    if (playerMarkers[name]) {
+                        map.removeLayer(playerMarkers[name]);
+                        delete playerMarkers[name];
+                    }
+                    return;
+                }
 
                 const isEliminated = !!globalEliminated[name];
                 const isTarget = activeTargets.includes(name);
                 const isHunter = huntersTargetingMe.includes(name);
 
-                let markerColor = "#00e676"; // Default active
+                let markerColor = "#00e676";
                 let radius = 7;
                 let weight = 2;
                 let strokeColor = "#ffffff";
@@ -1290,14 +1226,14 @@
                     markerColor = "#ff5252";
                     statusLabel = " (ELIMINATED)";
                 } else if (isTarget) {
-                    markerColor = "#ff9000"; // Bright Orange for targets
+                    markerColor = "#ff9000";
                     strokeColor = "#ffff00";
                     radius = 10;
                     weight = 3;
                     statusLabel = " 🎯 [YOUR TARGET]";
                     className = "pulse-marker";
                 } else if (isHunter) {
-                    markerColor = "#e040fb"; // Neon Purple/Magenta for hunters targeting you
+                    markerColor = "#e040fb";
                     strokeColor = "#ffffff";
                     radius = 9;
                     weight = 3;
@@ -1339,7 +1275,6 @@
             renderTargetList();
         });
 
-        // Watch device GPS
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(
                 (pos) => {
@@ -1351,23 +1286,20 @@
                     const isSelfEliminated = myName ? !!globalEliminated[myName] : false;
                     const selfColor = isSelfEliminated ? "#ff5252" : "#00b0ff";
 
-                    if (!playerMarker) {
-                        playerMarker = L.circleMarker([lat, lng], {
-                            radius: 8,
-                            fillColor: selfColor,
-                            color: "#ffffff",
-                            weight: 2,
-                            opacity: 1,
-                            fillOpacity: 0.9
-                        }).addTo(map).bindPopup("You are here");
-                    } else {
-                        playerMarker.setLatLng([lat, lng]);
-                        playerMarker.setStyle({ fillColor: selfColor });
+                    // Fix: Remove pre-existing player marker before re-instantiating to prevent duplicate rendering
+                    if (playerMarker) {
+                        map.removeLayer(playerMarker);
+                        playerMarker = null;
                     }
 
-                    if (myName) {
-                        updateBreadcrumbs(myName, lat, lng);
-                    }
+                    playerMarker = L.circleMarker([lat, lng], {
+                        radius: 8,
+                        fillColor: selfColor,
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    }).addTo(map).bindPopup("You are here");
 
                     checkZoneBoundaries(currentPhaseNum);
 
