@@ -74,11 +74,32 @@
             padding-top: 4px;
         }
 
+        /* Admin Pause Banners */
+        .admin-pause-banner {
+            display: none;
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            background: rgba(234, 179, 8, 0.95);
+            color: #000;
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid #facc15;
+            box-shadow: 0 4px 20px rgba(234, 179, 8, 0.5);
+            text-align: center;
+            min-width: 260px;
+            font-weight: bold;
+            font-size: 0.85rem;
+        }
+
         /* Safe Zone Buffer Warning Banner */
         .buffer-card {
             display: none;
             position: absolute;
-            top: 110px;
+            top: 155px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -97,7 +118,7 @@
         .warning-card {
             display: none;
             position: absolute;
-            top: 155px;
+            top: 200px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -133,7 +154,7 @@
             margin-top: 2px;
         }
 
-        /* Live Elimination Announcement Banner */
+        /* Live Announcement Banner */
         .announcement-banner {
             display: none;
             position: absolute;
@@ -303,6 +324,9 @@
             font-weight: bold;
             border-bottom: 1px solid #333;
             padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .dropdown-select {
@@ -327,6 +351,12 @@
             font-weight: bold;
             box-sizing: border-box;
             text-align: center;
+        }
+
+        .admin-display {
+            background: #3b0764 !important;
+            color: #d8b4fe !important;
+            border: 1px solid #a855f7 !important;
         }
 
         .targets-container {
@@ -409,6 +439,33 @@
             gap: 6px;
         }
 
+        /* Admin Controls Block */
+        .admin-controls-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .admin-btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .admin-btn-announce { background: #9333ea; }
+        .admin-btn-pause { background: #eab308; color: #000; }
+        .admin-btn-reset { background: #ef4444; }
+        .admin-btn-logout { background: #475569; color: #fff; margin-top: 6px; }
+
         /* Testing Controls */
         .controls {
             position: absolute;
@@ -438,7 +495,6 @@
             background: #007bff;
         }
 
-        /* Target Marker Pulse Effect */
         @keyframes targetPulse {
             0% { r: 9; stroke-opacity: 1; }
             100% { r: 18; stroke-opacity: 0; }
@@ -451,10 +507,13 @@
 </head>
 <body>
 
-    <button class="sidebar-toggle" onclick="toggleSidebar()">☰ Targets</button>
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰ Menu</button>
 
     <div id="sidebar" class="sidebar">
-        <div id="sidebar-header-title" class="sidebar-header">Select Your Name</div>
+        <div class="sidebar-header">
+            <span id="sidebar-header-title">Select Your Name</span>
+            <button id="admin-login-btn" onclick="loginAdmin()" style="background: none; border: 1px solid #555; color: #aaa; font-size: 0.65rem; padding: 3px 6px; border-radius: 4px; cursor: pointer;">🔑 Admin</button>
+        </div>
         
         <div id="player-selection-container">
             <select id="player-select" class="dropdown-select" onchange="changePlayer()">
@@ -462,29 +521,52 @@
             </select>
         </div>
 
-        <!-- Active Targets Section -->
-        <div class="targets-container">
-            <div class="target-title">
-                <span>Active Targets</span>
-                <span id="my-eliminated-count" style="color: #4CAF50; font-size: 0.7rem;">Your Eliminations: 0</span>
+        <!-- Standard Player Targets Container -->
+        <div id="player-views-container">
+            <div class="targets-container">
+                <div class="target-title">
+                    <span>Active Targets</span>
+                    <span id="my-eliminated-count" style="color: #4CAF50; font-size: 0.7rem;">Your Eliminations: 0</span>
+                </div>
+                <ul id="target-list" class="target-list">
+                    <li style="color: #666; font-size: 0.8rem;">Select your name above to view targets.</li>
+                </ul>
             </div>
-            <ul id="target-list" class="target-list">
-                <li style="color: #666; font-size: 0.8rem;">Select your name above to view targets.</li>
-            </ul>
+
+            <div class="targets-container" style="margin-top: 14px;">
+                <div class="target-title" style="color: #ff9800;">
+                    <span>Targeting You 🎯</span>
+                </div>
+                <ul id="targeted-by-list" class="target-list">
+                    <li style="color: #666; font-size: 0.8rem;">Select your name above.</li>
+                </ul>
+            </div>
         </div>
 
-        <!-- Targeted By Section -->
-        <div class="targets-container">
-            <div class="target-title" style="color: #ff9800;">
-                <span>Targeting You 🎯</span>
+        <!-- Admin Control Panel -->
+        <div id="admin-panel" class="targets-container admin-controls-container" style="display: none; border-color: #a855f7;">
+            <div class="target-title" style="color: #c084fc;">
+                <span>Admin Actions</span>
             </div>
-            <ul id="targeted-by-list" class="target-list">
-                <li style="color: #666; font-size: 0.8rem;">Select your name above.</li>
-            </ul>
+
+            <button class="admin-btn admin-btn-announce" onclick="adminSendAnnouncement()">
+                📢 Send Broadcast
+            </button>
+            <button id="admin-pause-btn" class="admin-btn admin-btn-pause" onclick="adminTogglePauseTimer()">
+                ⏸️ Pause OOB Timers
+            </button>
+            <button id="admin-pause-tagging-btn" class="admin-btn admin-btn-pause" onclick="adminTogglePauseTagging()" style="background: #f97316; color: #fff;">
+                ⏸️ Pause Tagging
+            </button>
+            <button class="admin-btn admin-btn-reset" onclick="adminResetAllTimers()">
+                🔄 Reset All OOB Timers
+            </button>
+            <button class="admin-btn admin-btn-logout" onclick="logoutAdmin()">
+                🚪 Log Out Admin
+            </button>
         </div>
 
-        <!-- Questions / Help Button -->
-        <button class="sidebar-footer-btn" onclick="promptQuestion()">
+        <button id="help-btn" class="sidebar-footer-btn" onclick="promptQuestion()">
             ❓ Ask Question / Help
         </button>
     </div>
@@ -494,6 +576,14 @@
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
         <div id="players-remaining-label" class="status-remaining">Players Remaining: 48/48</div>
+    </div>
+
+    <!-- Global Admin Pause Banners -->
+    <div id="oob-pause-banner" class="admin-pause-banner">
+        ⏸️ OUT OF BOUNDS TIMERS PAUSED
+    </div>
+    <div id="tagging-pause-banner" class="admin-pause-banner" style="top: 145px; background: rgba(249, 115, 22, 0.95); border-color: #fdba74; color: #fff;">
+        🛑 TAGGING IS CURRENTLY PAUSED
     </div>
 
     <!-- Safe Zone Buffer Warning -->
@@ -552,7 +642,24 @@
     <div id="map"></div>
 
     <script>
-        // Telegram Configuration Integrated
+        // Helper Functions to handle Firebase Key Sanitization
+        function safeKey(str) {
+            return str ? str.replace(/\./g, '_DOT_') : '';
+        }
+
+        function restoreKey(str) {
+            return str ? str.replace(/_DOT_/g, '.') : '';
+        }
+
+        function unencodeObjectKeys(obj) {
+            if (!obj) return {};
+            const unencoded = {};
+            Object.keys(obj).forEach(key => {
+                unencoded[restoreKey(key)] = obj[key];
+            });
+            return unencoded;
+        }
+
         const TELEGRAM_BOT_TOKEN = '8946760235:AAGswijFCEXyJlooD6z3woBIFgf8fvPm7AE';
         const TELEGRAM_CHAT_ID = '8390992396';
 
@@ -568,7 +675,6 @@
             }).catch(err => console.error("Telegram delivery error:", err));
         }
 
-        // Firebase Credentials
         const firebaseConfig = {
             apiKey: "AIzaSyCGIaddkRmlTf8Hn0Bkb5S_Agel20CgCZU",
             authDomain: "splash-tag-deer-lake.firebaseapp.com",
@@ -582,7 +688,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Shuffled Player Roster
         const players = [
             "Janz", "Aavin I.", "Baptiste N.", "Mia S.", "Tiemar T.",
             "Julia K.", "Eno E.", "Ethan P.", "Harrison S.", "Shaianne C.",
@@ -597,6 +702,9 @@
         ];
 
         let selectedPlayerIndex = null;
+        let isAdmin = false;
+        let isOobPaused = false;
+        let isTaggingPaused = false;
         let globalEliminated = {}; 
         let userEliminations = {}; 
         let playerMarkers = {};
@@ -611,13 +719,22 @@
         let totalTimeSpentOutside = 0; 
         let outOfBoundsStartTimestamp = null;
 
-        const playerSelect = document.getElementById('player-select');
-        players.forEach((player, index) => {
-            const opt = document.createElement('option');
-            opt.value = index;
-            opt.innerText = player;
-            playerSelect.appendChild(opt);
-        });
+        function populatePlayerDropdown() {
+            const container = document.getElementById('player-selection-container');
+            container.innerHTML = `
+                <select id="player-select" class="dropdown-select" onchange="changePlayer()">
+                    <option value="" disabled selected>-- Select Name --</option>
+                </select>
+            `;
+            const playerSelect = document.getElementById('player-select');
+            players.forEach((player, index) => {
+                const opt = document.createElement('option');
+                opt.value = index;
+                opt.innerText = player;
+                playerSelect.appendChild(opt);
+            });
+        }
+        populatePlayerDropdown();
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
@@ -627,26 +744,140 @@
             document.getElementById('log-drawer').classList.toggle('open');
         }
 
+        // Passcode gated Admin Login (PIN: 0000)
+        function loginAdmin() {
+            const pin = prompt("Enter Admin Passcode:");
+            if (pin === "0000") {
+                isAdmin = true;
+                selectedPlayerIndex = null;
+                
+                document.getElementById('sidebar-header-title').innerText = "Logged In As";
+                document.getElementById('player-selection-container').innerHTML = `
+                    <div class="locked-player-display admin-display">👑 Non-Player Admin</div>
+                `;
+                
+                document.getElementById('admin-login-btn').style.display = 'none';
+                document.getElementById('player-views-container').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'flex';
+                document.getElementById('help-btn').style.display = 'none';
+
+                alert("Admin access granted.");
+            } else if (pin !== null) {
+                alert("Incorrect PIN code.");
+            }
+        }
+
+        function logoutAdmin() {
+            isAdmin = false;
+            selectedPlayerIndex = null;
+
+            document.getElementById('sidebar-header-title').innerText = "Select Your Name";
+            document.getElementById('admin-login-btn').style.display = 'block';
+            populatePlayerDropdown();
+
+            document.getElementById('player-views-container').style.display = 'block';
+            document.getElementById('admin-panel').style.display = 'none';
+            document.getElementById('help-btn').style.display = 'flex';
+
+            renderTargetList();
+            renderAllPlayerMarkers();
+            alert("Logged out of Admin mode.");
+        }
+
         function changePlayer() {
             const selectEl = document.getElementById('player-select');
             selectedPlayerIndex = parseInt(selectEl.value);
+            isAdmin = false;
             const selectedName = players[selectedPlayerIndex];
+            const safePlayerKey = safeKey(selectedName);
 
             document.getElementById('sidebar-header-title').innerText = "Logged In As";
             document.getElementById('player-selection-container').innerHTML = `
                 <div class="locked-player-display">👤 ${selectedName}</div>
             `;
 
-            db.ref('game/outOfBoundsTime/' + selectedName).on('value', (snapshot) => {
+            db.ref('game/outOfBoundsTime/' + safePlayerKey).on('value', (snapshot) => {
                 totalTimeSpentOutside = snapshot.val() || 0;
             });
 
-            db.ref('game/outOfBoundsStart/' + selectedName).on('value', (snapshot) => {
+            db.ref('game/outOfBoundsStart/' + safePlayerKey).on('value', (snapshot) => {
                 outOfBoundsStartTimestamp = snapshot.val() || null;
             });
 
             renderTargetList();
             renderAllPlayerMarkers();
+        }
+
+        // Admin OOB Controls Sync
+        db.ref('game/oobPaused').on('value', (snapshot) => {
+            isOobPaused = !!snapshot.val();
+            const btn = document.getElementById('admin-pause-btn');
+            const banner = document.getElementById('oob-pause-banner');
+            
+            if (btn) {
+                if (isOobPaused) {
+                    btn.innerText = "▶️ Resume OOB Timers";
+                    btn.style.background = "#22c55e";
+                    btn.style.color = "#fff";
+                } else {
+                    btn.innerText = "⏸️ Pause OOB Timers";
+                    btn.style.background = "#eab308";
+                    btn.style.color = "#000";
+                }
+            }
+
+            if (banner) {
+                banner.style.display = isOobPaused ? 'block' : 'none';
+            }
+        });
+
+        // Admin Tagging Controls Sync
+        db.ref('game/taggingPaused').on('value', (snapshot) => {
+            isTaggingPaused = !!snapshot.val();
+            const btn = document.getElementById('admin-pause-tagging-btn');
+            const banner = document.getElementById('tagging-pause-banner');
+
+            if (btn) {
+                if (isTaggingPaused) {
+                    btn.innerText = "▶️ Resume Tagging";
+                    btn.style.background = "#22c55e";
+                } else {
+                    btn.innerText = "⏸️ Pause Tagging";
+                    btn.style.background = "#f97316";
+                }
+            }
+
+            if (banner) {
+                banner.style.display = isTaggingPaused ? 'block' : 'none';
+            }
+        });
+
+        function adminSendAnnouncement() {
+            const text = prompt("Enter broadcast announcement text:");
+            if (text && text.trim() !== "") {
+                db.ref('game/announcements').push({
+                    text: text.trim(),
+                    timestamp: Date.now()
+                });
+                sendTelegramNotification(`📢 <b>ORGANIZER ANNOUNCEMENT:</b>\n"${text.trim()}"`);
+                alert("Announcement broadcasted!");
+            }
+        }
+
+        function adminTogglePauseTimer() {
+            db.ref('game/oobPaused').set(!isOobPaused);
+        }
+
+        function adminTogglePauseTagging() {
+            db.ref('game/taggingPaused').set(!isTaggingPaused);
+        }
+
+        function adminResetAllTimers() {
+            if (confirm("Reset ALL players' out of bounds timers back to 0 minutes?")) {
+                db.ref('game/outOfBoundsTime').remove();
+                db.ref('game/outOfBoundsStart').remove();
+                alert("All out of bounds timers reset successfully.");
+            }
         }
 
         function promptQuestion() {
@@ -722,7 +953,8 @@
         }
 
         db.ref('game/eliminated').on('value', (snapshot) => {
-            const newEliminated = snapshot.val() || {};
+            const rawEliminated = snapshot.val() || {};
+            const newEliminated = unencodeObjectKeys(rawEliminated);
 
             if (!isInitialLoad) {
                 Object.keys(newEliminated).forEach(player => {
@@ -741,7 +973,8 @@
         });
 
         db.ref('game/eliminatedBy').on('value', (snapshot) => {
-            userEliminations = snapshot.val() || {};
+            const rawEliminatedBy = snapshot.val() || {};
+            userEliminations = unencodeObjectKeys(rawEliminatedBy);
             renderTargetList();
         });
 
@@ -755,10 +988,11 @@
             if (selectedPlayerIndex === null) return;
 
             const myName = players[selectedPlayerIndex];
-            const pending = snapshot.val() || {};
+            const safeMyName = safeKey(myName);
+            const pending = unencodeObjectKeys(snapshot.val() || {});
 
-            if (pending[myName]) {
-                const tagData = pending[myName];
+            if (pending[safeMyName]) {
+                const tagData = pending[safeMyName];
                 document.getElementById('confirm-msg').innerText = `${tagData.taggedBy} marked you as eliminated!`;
                 document.getElementById('confirm-modal').setAttribute('data-attacker', tagData.taggedBy);
                 document.getElementById('confirm-modal').style.display = 'flex';
@@ -767,25 +1001,24 @@
             }
         });
 
-        // Listen for Private Messages sent via Telegram Replied Messages
         db.ref('game/messages').on('value', (snapshot) => {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
-            const allMessages = snapshot.val() || {};
+            const safeMyName = safeKey(myName);
+            const allMessages = unencodeObjectKeys(snapshot.val() || {});
             
-            if (allMessages[myName]) {
-                const myMsgs = allMessages[myName];
+            if (allMessages[safeMyName]) {
+                const myMsgs = allMessages[safeMyName];
                 const latestKey = Object.keys(myMsgs).pop();
                 const latestMsg = myMsgs[latestKey];
 
                 if (latestMsg && !latestMsg.read) {
                     alert(`📩 PRIVATE MESSAGE FROM ORGANIZER:\n\n"${latestMsg.text}"`);
-                    db.ref(`game/messages/${myName}/${latestKey}/read`).set(true);
+                    db.ref(`game/messages/${safeMyName}/${latestKey}/read`).set(true);
                 }
             }
         });
 
-        // Listen for Global Broadcast Announcements from Telegram
         db.ref('game/announcements').limitToLast(1).on('child_added', (snapshot) => {
             const data = snapshot.val();
             if (!data) return;
@@ -832,7 +1065,7 @@
         }
 
         function renderTargetList() {
-            if (selectedPlayerIndex === null) return;
+            if (selectedPlayerIndex === null || isAdmin) return;
 
             const playerName = players[selectedPlayerIndex];
             const targetListEl = document.getElementById('target-list');
@@ -916,7 +1149,12 @@
 
         function tagTarget(targetName, event) {
             event.preventDefault();
-            if (selectedPlayerIndex === null) return;
+            if (selectedPlayerIndex === null || isAdmin) return;
+
+            if (isTaggingPaused) {
+                alert("🛑 Tagging is currently PAUSED by the organizer!");
+                return;
+            }
 
             if (playerMarker) {
                 const currentLatLng = playerMarker.getLatLng();
@@ -931,9 +1169,10 @@
             }
 
             const attackerName = players[selectedPlayerIndex];
+            const safeTargetKey = safeKey(targetName);
             const attackerNote = prompt(`Tagging ${targetName}! (Optional) Add a quick note or evidence details:`) || "No initial note provided";
 
-            db.ref('game/pendingTags/' + targetName).set({
+            db.ref('game/pendingTags/' + safeTargetKey).set({
                 taggedBy: attackerName,
                 attackerMessage: attackerNote.trim(),
                 timestamp: Date.now()
@@ -943,17 +1182,18 @@
         }
 
         function respondToTag(action) {
-            if (selectedPlayerIndex === null) return;
+            if (selectedPlayerIndex === null || isAdmin) return;
             const myName = players[selectedPlayerIndex];
+            const safeMyKey = safeKey(myName);
             const modal = document.getElementById('confirm-modal');
             const attackerName = modal.getAttribute('data-attacker');
 
             if (action === 'confirm') {
                 if (attackerName) {
-                    db.ref('game/eliminatedBy/' + myName).set(attackerName);
+                    db.ref('game/eliminatedBy/' + safeMyKey).set(attackerName);
                 }
-                db.ref('game/eliminated/' + myName).set(true);
-                db.ref('game/pendingTags/' + myName).remove();
+                db.ref('game/eliminated/' + safeMyKey).set(true);
+                db.ref('game/pendingTags/' + safeMyKey).remove();
                 modal.style.display = 'none';
             } else if (action === 'dispute') {
                 const defenderReason = prompt(`[DEFENDER] ${myName}, why are you disputing this tag?`);
@@ -976,10 +1216,10 @@
                     alert("Dispute cancelled (no reason provided).");
                 }
                 
-                db.ref('game/pendingTags/' + myName).remove();
+                db.ref('game/pendingTags/' + safeMyKey).remove();
                 modal.style.display = 'none';
             } else {
-                db.ref('game/pendingTags/' + myName).remove();
+                db.ref('game/pendingTags/' + safeMyKey).remove();
                 modal.style.display = 'none';
             }
         }
@@ -1109,8 +1349,15 @@
         }
 
         function checkZoneBoundaries(phaseNum) {
-            if (selectedPlayerIndex === null) return;
+            if (selectedPlayerIndex === null || isAdmin || isOobPaused) {
+                document.getElementById('warning-card').style.display = 'none';
+                document.getElementById('buffer-card').style.display = 'none';
+                return;
+            }
+
             const myName = players[selectedPlayerIndex];
+            const safeMyKey = safeKey(myName);
+
             if (globalEliminated[myName]) {
                 document.getElementById('warning-card').style.display = 'none';
                 document.getElementById('buffer-card').style.display = 'none';
@@ -1130,7 +1377,7 @@
 
                     if (!outOfBoundsStartTimestamp) {
                         outOfBoundsStartTimestamp = now;
-                        db.ref('game/outOfBoundsStart/' + myName).set(now);
+                        db.ref('game/outOfBoundsStart/' + safeMyKey).set(now);
                     }
 
                     const currentSessionElapsed = now - outOfBoundsStartTimestamp;
@@ -1146,18 +1393,18 @@
                         document.getElementById('warning-card').style.display = 'block';
                     } else {
                         document.getElementById('warning-card').style.display = 'none';
-                        db.ref('game/outOfBoundsStart/' + myName).remove();
-                        db.ref('game/outOfBoundsTime/' + myName).set(TOTAL_GRACE_PERIOD);
-                        db.ref('game/eliminatedBy/' + myName).set("Out of Bounds");
-                        db.ref('game/eliminated/' + myName).set(true);
+                        db.ref('game/outOfBoundsStart/' + safeMyKey).remove();
+                        db.ref('game/outOfBoundsTime/' + safeMyKey).set(TOTAL_GRACE_PERIOD);
+                        db.ref('game/eliminatedBy/' + safeMyKey).set("Out of Bounds");
+                        db.ref('game/eliminated/' + safeMyKey).set(true);
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
                     if (outOfBoundsStartTimestamp) {
                         const elapsed = now - outOfBoundsStartTimestamp;
                         totalTimeSpentOutside += elapsed;
-                        db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
-                        db.ref('game/outOfBoundsStart/' + myName).remove();
+                        db.ref('game/outOfBoundsTime/' + safeMyKey).set(totalTimeSpentOutside);
+                        db.ref('game/outOfBoundsStart/' + safeMyKey).remove();
                         outOfBoundsStartTimestamp = null;
                     }
                     document.getElementById('warning-card').style.display = 'none';
@@ -1193,30 +1440,27 @@
             const now = new Date();
             const minutes = now.getHours() * 60 + now.getMinutes();
 
-            if (minutes < 15 * 60 + 30) return 1; // Before 3:30 PM
-            if (minutes < 16 * 60 + 30) return 2; // Before 4:30 PM
-            if (minutes < 17 * 60 + 30) return 3; // Before 5:30 PM
-            return 4;                            // 5:30 PM - 6:15 PM
+            if (minutes < 15 * 60 + 30) return 1; 
+            if (minutes < 16 * 60 + 30) return 2; 
+            if (minutes < 17 * 60 + 30) return 3; 
+            return 4;                            
         }
 
         function updateGame() {
             const now = new Date();
             const year = now.getFullYear();
-            const month = now.getMonth(); // 0-indexed (8 = September)
+            const month = now.getMonth(); 
             const date = now.getDate();
             const minutes = now.getHours() * 60 + now.getMinutes();
 
             document.getElementById('time-label').innerText = `Clock: ${now.toLocaleTimeString()}`;
 
-            // Check specifically for September 7, 2026
             if (year === 2026 && month === 8 && date === 7) {
-                // Game Commencement at 2:30 PM
                 if (minutes >= 14 * 60 + 30 && !gameCommencedAnnounced) {
                     gameCommencedAnnounced = true;
                     triggerAnnouncement("ALL PLAYERS", "GAME_COMMENCED");
                 }
 
-                // Game Over at 6:15 PM
                 if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
                     gameOverAnnounced = true;
                     triggerAnnouncement("EVERYONE", "GAME_OVER");
@@ -1254,7 +1498,7 @@
             let activeTargets = [];
             let huntersTargetingMe = [];
 
-            if (selectedPlayerIndex !== null) {
+            if (selectedPlayerIndex !== null && !isAdmin) {
                 activeTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
                 
                 const myName = players[selectedPlayerIndex];
@@ -1270,7 +1514,7 @@
             Object.keys(cachedLocations).forEach(name => {
                 const data = cachedLocations[name];
 
-                if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) {
+                if (selectedPlayerIndex !== null && !isAdmin && name === players[selectedPlayerIndex]) {
                     if (playerMarkers[name]) {
                         map.removeLayer(playerMarkers[name]);
                         delete playerMarkers[name];
@@ -1327,7 +1571,7 @@
                 }
             });
 
-            if (selectedPlayerIndex !== null && playerMarker) {
+            if (selectedPlayerIndex !== null && !isAdmin && playerMarker) {
                 const myName = players[selectedPlayerIndex];
                 const isSelfEliminated = !!globalEliminated[myName];
                 playerMarker.setStyle({
@@ -1337,7 +1581,8 @@
         }
 
         db.ref('game/locations').on('value', (snapshot) => {
-            cachedLocations = snapshot.val() || {};
+            const rawLocations = snapshot.val() || {};
+            cachedLocations = unencodeObjectKeys(rawLocations);
             renderAllPlayerMarkers();
             renderTargetList();
         });
@@ -1349,7 +1594,8 @@
                     const lng = pos.coords.longitude;
                     const now = Date.now();
 
-                    const myName = selectedPlayerIndex !== null ? players[selectedPlayerIndex] : null;
+                    const myName = (selectedPlayerIndex !== null && !isAdmin) ? players[selectedPlayerIndex] : null;
+                    const safeMyKey = safeKey(myName);
                     const isSelfEliminated = myName ? !!globalEliminated[myName] : false;
                     const selfColor = isSelfEliminated ? "#ff5252" : "#00b0ff";
 
@@ -1358,19 +1604,21 @@
                         playerMarker = null;
                     }
 
-                    playerMarker = L.circleMarker([lat, lng], {
-                        radius: 8,
-                        fillColor: selfColor,
-                        color: "#ffffff",
-                        weight: 2,
-                        opacity: 1,
-                        fillOpacity: 0.9
-                    }).addTo(map).bindPopup("You are here");
+                    if (!isAdmin) {
+                        playerMarker = L.circleMarker([lat, lng], {
+                            radius: 8,
+                            fillColor: selfColor,
+                            color: "#ffffff",
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        }).addTo(map).bindPopup("You are here");
+                    }
 
                     checkZoneBoundaries(currentPhaseNum);
 
-                    if (selectedPlayerIndex !== null && (now - lastFirebaseUpdate >= UPDATE_INTERVAL)) {
-                        db.ref('game/locations/' + myName).set({
+                    if (selectedPlayerIndex !== null && !isAdmin && (now - lastFirebaseUpdate >= UPDATE_INTERVAL)) {
+                        db.ref('game/locations/' + safeMyKey).set({
                             lat: lat,
                             lng: lng,
                             timestamp: now
