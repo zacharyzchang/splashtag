@@ -767,6 +767,40 @@
             }
         });
 
+        // Listen for Private Messages sent via Telegram Replied Messages
+        db.ref('game/messages').on('value', (snapshot) => {
+            if (selectedPlayerIndex === null) return;
+            const myName = players[selectedPlayerIndex];
+            const allMessages = snapshot.val() || {};
+            
+            if (allMessages[myName]) {
+                const myMsgs = allMessages[myName];
+                const latestKey = Object.keys(myMsgs).pop();
+                const latestMsg = myMsgs[latestKey];
+
+                if (latestMsg && !latestMsg.read) {
+                    alert(`📩 PRIVATE MESSAGE FROM ORGANIZER:\n\n"${latestMsg.text}"`);
+                    db.ref(`game/messages/${myName}/${latestKey}/read`).set(true);
+                }
+            }
+        });
+
+        // Listen for Global Broadcast Announcements from Telegram
+        db.ref('game/announcements').limitToLast(1).on('child_added', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            const banner = document.getElementById('announcement-banner');
+            const textEl = document.getElementById('announcement-text');
+            
+            textEl.innerHTML = `📢 <b>ANNOUNCEMENT:</b> ${data.text}`;
+            banner.style.display = 'block';
+
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 10000);
+        });
+
         function getActiveTargetsForPlayer(playerIdx) {
             const playerName = players[playerIdx];
             if (globalEliminated[playerName]) return [];
@@ -897,9 +931,11 @@
             }
 
             const attackerName = players[selectedPlayerIndex];
+            const attackerNote = prompt(`Tagging ${targetName}! (Optional) Add a quick note or evidence details:`) || "No initial note provided";
 
             db.ref('game/pendingTags/' + targetName).set({
                 taggedBy: attackerName,
+                attackerMessage: attackerNote.trim(),
                 timestamp: Date.now()
             });
 
@@ -920,12 +956,26 @@
                 db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             } else if (action === 'dispute') {
-                const reason = prompt(`Please enter your reason for disputing the tag from ${attackerName}:`);
-                if (reason && reason.trim() !== "") {
-                    const disputeMsg = `⚠️ <b>TAG DISPUTE RAISED</b>\n<b>Target (Defender):</b> ${myName}\n<b>Claimed Hunter:</b> ${attackerName}\n<b>Reason:</b> ${reason.trim()}`;
+                const defenderReason = prompt(`[DEFENDER] ${myName}, why are you disputing this tag?`);
+                
+                if (defenderReason && defenderReason.trim() !== "") {
+                    const attackerResponse = prompt(`[ATTACKER] ${attackerName}, please enter your response regarding this dispute:`);
+
+                    const defText = defenderReason.trim();
+                    const attText = (attackerResponse && attackerResponse.trim() !== "") ? attackerResponse.trim() : "No response provided.";
+
+                    const disputeMsg = `⚠️ <b>TAG DISPUTE RAISED</b>\n` +
+                                       `<b>Defender (Target):</b> ${myName}\n` +
+                                       `<b>Defender's Reason:</b> "${defText}"\n\n` +
+                                       `<b>Attacker (Hunter):</b> ${attackerName}\n` +
+                                       `<b>Attacker's Statement:</b> "${attText}"`;
+                                       
                     sendTelegramNotification(disputeMsg);
-                    alert("Dispute sent to the organizer! The tag remains unconfirmed for now.");
+                    alert("Dispute & statements sent to the organizer! The tag remains pending until reviewed.");
+                } else {
+                    alert("Dispute cancelled (no reason provided).");
                 }
+                
                 db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             } else {
@@ -1160,13 +1210,13 @@
 
             // Check specifically for September 7, 2026
             if (year === 2026 && month === 8 && date === 7) {
-                // Game Commencement at 2:30 PM (14:30 = 870 mins)
+                // Game Commencement at 2:30 PM
                 if (minutes >= 14 * 60 + 30 && !gameCommencedAnnounced) {
                     gameCommencedAnnounced = true;
                     triggerAnnouncement("ALL PLAYERS", "GAME_COMMENCED");
                 }
 
-                // Game Over at 6:15 PM (18:15 = 1095 mins)
+                // Game Over at 6:15 PM
                 if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
                     gameOverAnnounced = true;
                     triggerAnnouncement("EVERYONE", "GAME_OVER");
@@ -1220,7 +1270,6 @@
             Object.keys(cachedLocations).forEach(name => {
                 const data = cachedLocations[name];
 
-                // Skip rendering own marker in player iteration to prevent duplicated markers
                 if (selectedPlayerIndex !== null && name === players[selectedPlayerIndex]) {
                     if (playerMarkers[name]) {
                         map.removeLayer(playerMarkers[name]);
