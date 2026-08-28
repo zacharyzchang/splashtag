@@ -504,7 +504,7 @@
             animation: targetPulse 1.5s infinite ease-out;
         }
 
-        /* Target Swap Flash Animation Overlay */
+        /* Target Swap Flash Animation Overlay (For Tagger) */
         .target-swap-overlay {
             display: none;
             position: fixed;
@@ -537,6 +537,43 @@
             font-weight: 900;
             color: #ff9000;
             text-shadow: 0 0 20px rgba(255, 144, 0, 0.8), 0 0 40px #000;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* Eliminated Flash Animation Overlay (For Tagged Person) */
+        .eliminated-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3000;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(220, 38, 38, 0.6) 0%, rgba(0, 0, 0, 0.9) 80%);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .eliminated-overlay.active {
+            display: flex;
+            animation: eliminatedFlash 3s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+        }
+
+        @keyframes eliminatedFlash {
+            0% { opacity: 0; transform: scale(0.8); }
+            15% { opacity: 1; transform: scale(1.05); }
+            85% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.1); }
+        }
+
+        .eliminated-text {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #ff5252;
+            text-shadow: 0 0 20px rgba(255, 82, 82, 0.8), 0 0 40px #000;
             letter-spacing: 2px;
             text-transform: uppercase;
         }
@@ -657,11 +694,18 @@
         <div id="warning-countdown" class="warning-countdown">Return in 15:00</div>
     </div>
 
-    <!-- Target Swap Flash Overlay -->
+    <!-- Target Swap Flash Overlay (Tagger) -->
     <div id="target-swap-overlay" class="target-swap-overlay">
         <div style="font-size: 3rem;">🎯⚡</div>
         <div class="swap-text">TARGETS REASSIGNED</div>
         <div style="color: #fff; font-size: 0.9rem; margin-top: 6px; font-weight: bold;">Check your list for new active targets!</div>
+    </div>
+
+    <!-- Eliminated Flash Overlay (Tagged Person) -->
+    <div id="eliminated-overlay" class="eliminated-overlay">
+        <div style="font-size: 3.5rem;">💀⚡</div>
+        <div class="eliminated-text">YOU ARE OUT!</div>
+        <div style="color: #fff; font-size: 0.9rem; margin-top: 6px; font-weight: bold;">You have been tagged and eliminated.</div>
     </div>
 
     <!-- Live Elimination Announcement Banner -->
@@ -737,16 +781,16 @@
         const db = firebase.database();
 
         const players = [
-            "Janz", "Aavin I", "Baptiste N", "Mia S", "Tiemar T",
-            "Julia K", "Eno E", "Ethan P", "Harrison S", "Shaianne C",
-            "Mataya O", "Philos M", "Jamilee S", "Asher C", "Doris L",
-            "Simon O", "Zachary C", "Hannah B", "Erin C", "Joshua J",
-            "Acacia C", "Amery G", "Shawn T", "Kylee F", "Obed M",
-            "Bobby Y", "Braedan R", "Richard G", "Ev N", "Felipe G",
-            "Liv N", "Exaucé M", "Sydney M", "Micaila L", "Soukina H",
-            "Lake", "Betty Y", "Brenden S", "Kaylan S", "Mariah V",
-            "Chenay W", "Jacob K", "Owen S", "Javier N", "Ryan B",
-            "Zoe S", "Aidan S", "Sofia V"
+            "Janz", "Aavin", "Baptiste", "Mia", "Tiemar",
+            "Julia", "Eno", "Ethan", "Harrison", "Shaianne",
+            "Mataya", "Philos", "Jamilee", "Asher", "Doris",
+            "Simon", "Zachary", "Hannah", "Erin", "Joshua",
+            "Acacia", "Amery", "Shawn", "Kylee", "Obed",
+            "Bobby", "Braedan", "Richard", "Ev", "Felipe",
+            "Liv", "Exaucé", "Sydney", "Micaila", "Soukina",
+            "Lake", "Betty", "Brenden", "Kaylan", "Mariah",
+            "Chenay", "Jacob", "Owen", "Javier", "Ryan",
+            "Zoe", "Aidan", "Sofia"
         ];
 
         let selectedPlayerIndex = null;
@@ -986,6 +1030,17 @@
             }, 2000);
         }
 
+        function triggerEliminatedAnimation() {
+            const overlay = document.getElementById('eliminated-overlay');
+            overlay.classList.remove('active');
+            void overlay.offsetWidth; 
+            overlay.classList.add('active');
+
+            setTimeout(() => {
+                overlay.classList.remove('active');
+            }, 3000);
+        }
+
         function renderAnnouncementLogs() {
             const logListEl = document.getElementById('log-list');
             const badgeEl = document.getElementById('log-count-badge');
@@ -1017,6 +1072,10 @@
                     if (!globalEliminated[player]) {
                         const cause = userEliminations[player] || "Out of Bounds";
                         triggerAnnouncement(player, cause);
+
+                        if (selectedPlayerIndex !== null && !isAdmin && player === players[selectedPlayerIndex]) {
+                            triggerEliminatedAnimation();
+                        }
                     }
                 });
             }
@@ -1037,12 +1096,16 @@
 
         function checkTargetSwap() {
             if (selectedPlayerIndex === null || isAdmin) return;
+
+            const myName = players[selectedPlayerIndex];
             const currentTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
 
             const hasChanged = currentTargets.length !== previousTargetsList.length || 
                 currentTargets.some((target, i) => target !== previousTargetsList[i]);
 
-            if (hasChanged && previousTargetsList.length > 0) {
+            const wasTargeter = previousTargetsList.some(target => userEliminations[target] === myName);
+
+            if (hasChanged && previousTargetsList.length > 0 && wasTargeter) {
                 triggerTargetSwapAnimation();
             }
 
@@ -1226,11 +1289,9 @@
             }
 
             const attackerName = players[selectedPlayerIndex];
-            const attackerNote = prompt(`Tagging ${targetName}! (Optional) Add a quick note or evidence details:`) || "No initial note provided";
 
             db.ref('game/pendingTags/' + targetName).set({
                 taggedBy: attackerName,
-                attackerMessage: attackerNote.trim(),
                 timestamp: Date.now()
             });
 
@@ -1250,23 +1311,20 @@
                 db.ref('game/eliminated/' + myName).set(true);
                 db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
+                triggerEliminatedAnimation();
             } else if (action === 'dispute') {
                 const defenderReason = prompt(`[DEFENDER] ${myName}, why are you disputing this tag?`);
                 
                 if (defenderReason && defenderReason.trim() !== "") {
-                    const attackerResponse = prompt(`[ATTACKER] ${attackerName}, please enter your response regarding this dispute:`);
-
                     const defText = defenderReason.trim();
-                    const attText = (attackerResponse && attackerResponse.trim() !== "") ? attackerResponse.trim() : "No response provided.";
 
                     const disputeMsg = `⚠️ <b>TAG DISPUTE RAISED</b>\n` +
                                        `<b>Defender (Target):</b> ${myName}\n` +
                                        `<b>Defender's Reason:</b> "${defText}"\n\n` +
-                                       `<b>Attacker (Hunter):</b> ${attackerName}\n` +
-                                       `<b>Attacker's Statement:</b> "${attText}"`;
+                                       `<b>Attacker (Hunter):</b> ${attackerName}`;
                                        
                     sendTelegramNotification(disputeMsg);
-                    alert("Dispute & statements sent to the organizer! The tag remains pending until reviewed.");
+                    alert("Dispute sent to the organizer! The tag remains pending until reviewed.");
                 } else {
                     alert("Dispute cancelled (no reason provided).");
                 }
@@ -1708,17 +1766,6 @@
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(
                 (pos) => {
-                    const accuracy = pos.coords.accuracy;
-                    const gpsBadge = document.getElementById('gps-warning-badge');
-
-                    if (accuracy > 30) {
-                        gpsBadge.innerText = `📡 Weak GPS Signal (${Math.round(accuracy)}m error - position ignored)`;
-                        gpsBadge.style.display = 'block';
-                        return; 
-                    } else {
-                        gpsBadge.style.display = 'none';
-                    }
-
                     const lat = pos.coords.latitude;
                     const lng = pos.coords.longitude;
                     const now = Date.now();
