@@ -708,23 +708,6 @@
     <div id="map"></div>
 
     <script>
-        function safeKey(str) {
-            return str ? str.replace(/\./g, '_DOT_') : '';
-        }
-
-        function restoreKey(str) {
-            return str ? str.replace(/_DOT_/g, '.') : '';
-        }
-
-        function unencodeObjectKeys(obj) {
-            if (!obj) return {};
-            const unencoded = {};
-            Object.keys(obj).forEach(key => {
-                unencoded[restoreKey(key)] = obj[key];
-            });
-            return unencoded;
-        }
-
         const TELEGRAM_BOT_TOKEN = '8946760235:AAGswijFCEXyJlooD6z3woBIFgf8fvPm7AE';
         const TELEGRAM_CHAT_ID = '8390992396';
 
@@ -754,16 +737,16 @@
         const db = firebase.database();
 
         const players = [
-            "Janz", "Aavin I.", "Baptiste N.", "Mia S.", "Tiemar T.",
-            "Julia K.", "Eno E.", "Ethan P.", "Harrison S.", "Shaianne C.",
-            "Mataya O.", "Philos M.", "Jamilee S.", "Asher C.", "Doris L.",
-            "Simon O.", "Zachary C.", "Hannah B.", "Erin C.", "Joshua J.",
-            "Acacia C.", "Amery G.", "Shawn T.", "Kylee F.", "Obed M.",
-            "Bobby Y.", "Braedan R.", "Richard G.", "Ev N.", "Felipe G.",
-            "Liv N.", "Exaucé M.", "Sydney M.", "Micaila L.", "Soukina H.",
-            "Lake", "Betty Y.", "Brenden S.", "Kaylan S.", "Mariah V.",
-            "Chenay W.", "Jacob K.", "Owen S.", "Javier N.", "Ryan B.",
-            "Zoe S.", "Aidan S.", "Sofia V."
+            "Janz", "Aavin I", "Baptiste N", "Mia S", "Tiemar T",
+            "Julia K", "Eno E", "Ethan P", "Harrison S", "Shaianne C",
+            "Mataya O", "Philos M", "Jamilee S", "Asher C", "Doris L",
+            "Simon O", "Zachary C", "Hannah B", "Erin C", "Joshua J",
+            "Acacia C", "Amery G", "Shawn T", "Kylee F", "Obed M",
+            "Bobby Y", "Braedan R", "Richard G", "Ev N", "Felipe G",
+            "Liv N", "Exaucé M", "Sydney M", "Micaila L", "Soukina H",
+            "Lake", "Betty Y", "Brenden S", "Kaylan S", "Mariah V",
+            "Chenay W", "Jacob K", "Owen S", "Javier N", "Ryan B",
+            "Zoe S", "Aidan S", "Sofia V"
         ];
 
         let selectedPlayerIndex = null;
@@ -854,18 +837,17 @@
             selectedPlayerIndex = parseInt(selectEl.value);
             isAdmin = false;
             const selectedName = players[selectedPlayerIndex];
-            const safePlayerKey = safeKey(selectedName);
 
             document.getElementById('sidebar-header-title').innerText = "Logged In As";
             document.getElementById('player-selection-container').innerHTML = `
                 <div class="locked-player-display">👤 ${selectedName}</div>
             `;
 
-            db.ref('game/outOfBoundsTime/' + safePlayerKey).on('value', (snapshot) => {
+            db.ref('game/outOfBoundsTime/' + selectedName).on('value', (snapshot) => {
                 totalTimeSpentOutside = snapshot.val() || 0;
             });
 
-            db.ref('game/outOfBoundsStart/' + safePlayerKey).on('value', (snapshot) => {
+            db.ref('game/outOfBoundsStart/' + selectedName).on('value', (snapshot) => {
                 outOfBoundsStartTimestamp = snapshot.val() || null;
             });
 
@@ -1028,8 +1010,7 @@
         }
 
         db.ref('game/eliminated').on('value', (snapshot) => {
-            const rawEliminated = snapshot.val() || {};
-            const newEliminated = unencodeObjectKeys(rawEliminated);
+            const newEliminated = snapshot.val() || {};
 
             if (!isInitialLoad) {
                 Object.keys(newEliminated).forEach(player => {
@@ -1049,8 +1030,7 @@
         });
 
         db.ref('game/eliminatedBy').on('value', (snapshot) => {
-            const rawEliminatedBy = snapshot.val() || {};
-            userEliminations = unencodeObjectKeys(rawEliminatedBy);
+            userEliminations = snapshot.val() || {};
             checkTargetSwap();
             renderTargetList();
         });
@@ -1079,11 +1059,10 @@
             if (selectedPlayerIndex === null) return;
 
             const myName = players[selectedPlayerIndex];
-            const safeMyName = safeKey(myName);
-            const pending = unencodeObjectKeys(snapshot.val() || {});
+            const pending = snapshot.val() || {};
 
-            if (pending[safeMyName]) {
-                const tagData = pending[safeMyName];
+            if (pending[myName]) {
+                const tagData = pending[myName];
                 document.getElementById('confirm-msg').innerText = `${tagData.taggedBy} marked you as eliminated!`;
                 document.getElementById('confirm-modal').setAttribute('data-attacker', tagData.taggedBy);
                 document.getElementById('confirm-modal').style.display = 'flex';
@@ -1095,17 +1074,16 @@
         db.ref('game/messages').on('value', (snapshot) => {
             if (selectedPlayerIndex === null) return;
             const myName = players[selectedPlayerIndex];
-            const safeMyName = safeKey(myName);
-            const allMessages = unencodeObjectKeys(snapshot.val() || {});
+            const allMessages = snapshot.val() || {};
             
-            if (allMessages[safeMyName]) {
-                const myMsgs = allMessages[safeMyName];
+            if (allMessages[myName]) {
+                const myMsgs = allMessages[myName];
                 const latestKey = Object.keys(myMsgs).pop();
                 const latestMsg = myMsgs[latestKey];
 
                 if (latestMsg && !latestMsg.read) {
                     alert(`📩 PRIVATE MESSAGE FROM ORGANIZER:\n\n"${latestMsg.text}"`);
-                    db.ref(`game/messages/${safeMyName}/${latestKey}/read`).set(true);
+                    db.ref(`game/messages/${myName}/${latestKey}/read`).set(true);
                 }
             }
         });
@@ -1248,10 +1226,9 @@
             }
 
             const attackerName = players[selectedPlayerIndex];
-            const safeTargetKey = safeKey(targetName);
             const attackerNote = prompt(`Tagging ${targetName}! (Optional) Add a quick note or evidence details:`) || "No initial note provided";
 
-            db.ref('game/pendingTags/' + safeTargetKey).set({
+            db.ref('game/pendingTags/' + targetName).set({
                 taggedBy: attackerName,
                 attackerMessage: attackerNote.trim(),
                 timestamp: Date.now()
@@ -1263,16 +1240,15 @@
         function respondToTag(action) {
             if (selectedPlayerIndex === null || isAdmin) return;
             const myName = players[selectedPlayerIndex];
-            const safeMyKey = safeKey(myName);
             const modal = document.getElementById('confirm-modal');
             const attackerName = modal.getAttribute('data-attacker');
 
             if (action === 'confirm') {
                 if (attackerName) {
-                    db.ref('game/eliminatedBy/' + safeMyKey).set(attackerName);
+                    db.ref('game/eliminatedBy/' + myName).set(attackerName);
                 }
-                db.ref('game/eliminated/' + safeMyKey).set(true);
-                db.ref('game/pendingTags/' + safeMyKey).remove();
+                db.ref('game/eliminated/' + myName).set(true);
+                db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             } else if (action === 'dispute') {
                 const defenderReason = prompt(`[DEFENDER] ${myName}, why are you disputing this tag?`);
@@ -1295,10 +1271,10 @@
                     alert("Dispute cancelled (no reason provided).");
                 }
                 
-                db.ref('game/pendingTags/' + safeMyKey).remove();
+                db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             } else {
-                db.ref('game/pendingTags/' + safeMyKey).remove();
+                db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
             }
         }
@@ -1436,7 +1412,6 @@
             }
 
             const myName = players[selectedPlayerIndex];
-            const safeMyKey = safeKey(myName);
 
             if (globalEliminated[myName]) {
                 document.getElementById('warning-card').style.display = 'none';
@@ -1457,7 +1432,7 @@
 
                     if (!outOfBoundsStartTimestamp) {
                         outOfBoundsStartTimestamp = now;
-                        db.ref('game/outOfBoundsStart/' + safeMyKey).set(now);
+                        db.ref('game/outOfBoundsStart/' + myName).set(now);
                     }
 
                     const currentSessionElapsed = now - outOfBoundsStartTimestamp;
@@ -1473,18 +1448,18 @@
                         document.getElementById('warning-card').style.display = 'block';
                     } else {
                         document.getElementById('warning-card').style.display = 'none';
-                        db.ref('game/outOfBoundsStart/' + safeMyKey).remove();
-                        db.ref('game/outOfBoundsTime/' + safeMyKey).set(TOTAL_GRACE_PERIOD);
-                        db.ref('game/eliminatedBy/' + safeMyKey).set("Out of Bounds");
-                        db.ref('game/eliminated/' + safeMyKey).set(true);
+                        db.ref('game/outOfBoundsStart/' + myName).remove();
+                        db.ref('game/outOfBoundsTime/' + myName).set(TOTAL_GRACE_PERIOD);
+                        db.ref('game/eliminatedBy/' + myName).set("Out of Bounds");
+                        db.ref('game/eliminated/' + myName).set(true);
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
                     if (outOfBoundsStartTimestamp) {
                         const elapsed = now - outOfBoundsStartTimestamp;
                         totalTimeSpentOutside += elapsed;
-                        db.ref('game/outOfBoundsTime/' + safeMyKey).set(totalTimeSpentOutside);
-                        db.ref('game/outOfBoundsStart/' + safeMyKey).remove();
+                        db.ref('game/outOfBoundsTime/' + myName).set(totalTimeSpentOutside);
+                        db.ref('game/outOfBoundsStart/' + myName).remove();
                         outOfBoundsStartTimestamp = null;
                     }
                     document.getElementById('warning-card').style.display = 'none';
@@ -1500,7 +1475,6 @@
             }
         }
 
-        // Resample polygon vertex array to match target size for smooth morphing
         function resamplePolygon(coords, targetCount) {
             if (coords.length === targetCount) return coords;
             const resampled = [];
@@ -1517,7 +1491,6 @@
             return resampled;
         }
 
-        // Dynamic Polygon Zone Shrink Animation (10-second transition)
         function animateZoneTransition(fromPhase, toPhase) {
             if (zoneAnimationInterval) clearInterval(zoneAnimationInterval);
 
@@ -1727,13 +1700,11 @@
         }
 
         db.ref('game/locations').on('value', (snapshot) => {
-            const rawLocations = snapshot.val() || {};
-            cachedLocations = unencodeObjectKeys(rawLocations);
+            cachedLocations = snapshot.val() || {};
             renderAllPlayerMarkers();
             renderTargetList();
         });
 
-        // GPS Filtering Logic (>30 meters accuracy threshold)
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(
                 (pos) => {
@@ -1753,7 +1724,6 @@
                     const now = Date.now();
 
                     const myName = (selectedPlayerIndex !== null && !isAdmin) ? players[selectedPlayerIndex] : null;
-                    const safeMyKey = safeKey(myName);
                     const isSelfEliminated = myName ? !!globalEliminated[myName] : false;
                     const selfColor = isSelfEliminated ? "#ff5252" : "#00b0ff";
 
@@ -1776,7 +1746,7 @@
                     checkZoneBoundaries(currentPhaseNum);
 
                     if (selectedPlayerIndex !== null && !isAdmin && (now - lastFirebaseUpdate >= UPDATE_INTERVAL)) {
-                        db.ref('game/locations/' + safeMyKey).set({
+                        db.ref('game/locations/' + myName).set({
                             lat: lat,
                             lng: lng,
                             timestamp: now
