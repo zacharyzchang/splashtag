@@ -503,6 +503,61 @@
         .pulse-marker {
             animation: targetPulse 1.5s infinite ease-out;
         }
+
+        /* Target Swap Flash Animation Overlay */
+        .target-swap-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3000;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(255, 144, 0, 0.4) 0%, rgba(0, 0, 0, 0.8) 80%);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .target-swap-overlay.active {
+            display: flex;
+            animation: targetSwapFlash 2s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+        }
+
+        @keyframes targetSwapFlash {
+            0% { opacity: 0; transform: scale(0.8); }
+            20% { opacity: 1; transform: scale(1.05); }
+            80% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.1); }
+        }
+
+        .swap-text {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #ff9000;
+            text-shadow: 0 0 20px rgba(255, 144, 0, 0.8), 0 0 40px #000;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* GPS Warning Badge */
+        .gps-warning-badge {
+            display: none;
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(220, 38, 38, 0.9);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border: 1px solid #ff5252;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
     </style>
 </head>
 <body>
@@ -578,6 +633,10 @@
         <div id="players-remaining-label" class="status-remaining">Players Remaining: 48/48</div>
     </div>
 
+    <div id="gps-warning-badge" class="gps-warning-badge">
+        📡 Weak GPS Signal (Ignoring Drift)
+    </div>
+
     <!-- Global Admin Pause Banners -->
     <div id="oob-pause-banner" class="admin-pause-banner">
         ⏸️ OUT OF BOUNDS TIMERS PAUSED
@@ -596,6 +655,13 @@
     <div id="warning-card" class="warning-card">
         <div class="warning-title">⚠️ Outside Safe Zone!</div>
         <div id="warning-countdown" class="warning-countdown">Return in 15:00</div>
+    </div>
+
+    <!-- Target Swap Flash Overlay -->
+    <div id="target-swap-overlay" class="target-swap-overlay">
+        <div style="font-size: 3rem;">🎯⚡</div>
+        <div class="swap-text">TARGETS REASSIGNED</div>
+        <div style="color: #fff; font-size: 0.9rem; margin-top: 6px; font-weight: bold;">Check your list for new active targets!</div>
     </div>
 
     <!-- Live Elimination Announcement Banner -->
@@ -642,7 +708,6 @@
     <div id="map"></div>
 
     <script>
-        // Helper Functions to handle Firebase Key Sanitization
         function safeKey(str) {
             return str ? str.replace(/\./g, '_DOT_') : '';
         }
@@ -714,6 +779,7 @@
         let announcementLogs = [];
         let gameCommencedAnnounced = false;
         let gameOverAnnounced = false;
+        let previousTargetsList = [];
 
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
         let totalTimeSpentOutside = 0; 
@@ -744,7 +810,6 @@
             document.getElementById('log-drawer').classList.toggle('open');
         }
 
-        // Passcode gated Admin Login (PIN: 0000)
         function loginAdmin() {
             const pin = prompt("Enter Admin Passcode:");
             if (pin === "0000") {
@@ -804,11 +869,11 @@
                 outOfBoundsStartTimestamp = snapshot.val() || null;
             });
 
+            previousTargetsList = getActiveTargetsForPlayer(selectedPlayerIndex);
             renderTargetList();
             renderAllPlayerMarkers();
         }
 
-        // Admin OOB Controls Sync
         db.ref('game/oobPaused').on('value', (snapshot) => {
             isOobPaused = !!snapshot.val();
             const btn = document.getElementById('admin-pause-btn');
@@ -831,7 +896,6 @@
             }
         });
 
-        // Admin Tagging Controls Sync
         db.ref('game/taggingPaused').on('value', (snapshot) => {
             isTaggingPaused = !!snapshot.val();
             const btn = document.getElementById('admin-pause-tagging-btn');
@@ -929,6 +993,17 @@
             renderAnnouncementLogs();
         }
 
+        function triggerTargetSwapAnimation() {
+            const overlay = document.getElementById('target-swap-overlay');
+            overlay.classList.remove('active');
+            void overlay.offsetWidth; 
+            overlay.classList.add('active');
+
+            setTimeout(() => {
+                overlay.classList.remove('active');
+            }, 2000);
+        }
+
         function renderAnnouncementLogs() {
             const logListEl = document.getElementById('log-list');
             const badgeEl = document.getElementById('log-count-badge');
@@ -968,6 +1043,7 @@
             globalEliminated = newEliminated;
             isInitialLoad = false;
             updateRemainingPlayersCount();
+            checkTargetSwap();
             renderTargetList();
             renderAllPlayerMarkers();
         });
@@ -975,8 +1051,23 @@
         db.ref('game/eliminatedBy').on('value', (snapshot) => {
             const rawEliminatedBy = snapshot.val() || {};
             userEliminations = unencodeObjectKeys(rawEliminatedBy);
+            checkTargetSwap();
             renderTargetList();
         });
+
+        function checkTargetSwap() {
+            if (selectedPlayerIndex === null || isAdmin) return;
+            const currentTargets = getActiveTargetsForPlayer(selectedPlayerIndex);
+
+            const hasChanged = currentTargets.length !== previousTargetsList.length || 
+                currentTargets.some((target, i) => target !== previousTargetsList[i]);
+
+            if (hasChanged && previousTargetsList.length > 0) {
+                triggerTargetSwapAnimation();
+            }
+
+            previousTargetsList = currentTargets;
+        }
 
         function updateRemainingPlayersCount() {
             const totalEliminated = Object.keys(globalEliminated).length;
@@ -1156,18 +1247,6 @@
                 return;
             }
 
-            if (playerMarker) {
-                const currentLatLng = playerMarker.getLatLng();
-                const userPoint = [currentLatLng.lat, currentLatLng.lng];
-                const currentZoneCoords = zones[currentPhaseNum].coords;
-                const isInside = isPointInPolygon(userPoint, currentZoneCoords);
-
-                if (!isInside) {
-                    alert("🚫 You cannot tag players while outside the safe zone! Return to the active play zone first.");
-                    return;
-                }
-            }
-
             const attackerName = players[selectedPlayerIndex];
             const safeTargetKey = safeKey(targetName);
             const attackerNote = prompt(`Tagging ${targetName}! (Optional) Add a quick note or evidence details:`) || "No initial note provided";
@@ -1226,9 +1305,9 @@
 
         const map = L.map('map', { zoomControl: false }).setView([49.2365, -122.9730], 15);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?apiKey=cb1_26zr_1_6bf24d0ce20fd9315d8cca83', {
             maxZoom: 19,
-            attribution: '&copy; OpenStreetMap &copy; CARTO'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         }).addTo(map);
 
         const zones = {
@@ -1316,6 +1395,7 @@
         let activePolygon = null;
         let manualOverride = false;
         let currentPhaseNum = 1;
+        let zoneAnimationInterval = null;
 
         function isPointInPolygon(point, vs) {
             const x = point[0], y = point[1];
@@ -1420,8 +1500,73 @@
             }
         }
 
+        // Resample polygon vertex array to match target size for smooth morphing
+        function resamplePolygon(coords, targetCount) {
+            if (coords.length === targetCount) return coords;
+            const resampled = [];
+            for (let i = 0; i < targetCount; i++) {
+                const index = (i / targetCount) * coords.length;
+                const lower = Math.floor(index);
+                const upper = (lower + 1) % coords.length;
+                const weight = index - lower;
+
+                const lat = coords[lower][0] * (1 - weight) + coords[upper][0] * weight;
+                const lng = coords[lower][1] * (1 - weight) + coords[upper][1] * weight;
+                resampled.push([lat, lng]);
+            }
+            return resampled;
+        }
+
+        // Dynamic Polygon Zone Shrink Animation (10-second transition)
+        function animateZoneTransition(fromPhase, toPhase) {
+            if (zoneAnimationInterval) clearInterval(zoneAnimationInterval);
+
+            const targetCount = Math.max(zones[fromPhase].coords.length, zones[toPhase].coords.length);
+            const startCoords = resamplePolygon(zones[fromPhase].coords, targetCount);
+            const endCoords = resamplePolygon(zones[toPhase].coords, targetCount);
+
+            const duration = 10000; 
+            const steps = 60;
+            const stepTime = duration / steps;
+            let currentStep = 0;
+
+            zoneAnimationInterval = setInterval(() => {
+                currentStep++;
+                const progress = currentStep / steps;
+
+                const interpolatedCoords = startCoords.map((startPt, idx) => {
+                    const endPt = endCoords[idx];
+                    const lat = startPt[0] + (endPt[0] - startPt[0]) * progress;
+                    const lng = startPt[1] + (endPt[1] - startPt[1]) * progress;
+                    return [lat, lng];
+                });
+
+                if (activePolygon) map.removeLayer(activePolygon);
+
+                activePolygon = L.polygon(interpolatedCoords, {
+                    color: zones[toPhase].color,
+                    fillColor: zones[toPhase].color,
+                    fillOpacity: 0.35,
+                    weight: 3
+                }).addTo(map);
+
+                if (currentStep >= steps) {
+                    clearInterval(zoneAnimationInterval);
+                    zoneAnimationInterval = null;
+                    renderZone(toPhase);
+                }
+            }, stepTime);
+        }
+
         function renderZone(phaseNum) {
+            const previousPhase = currentPhaseNum;
             currentPhaseNum = phaseNum;
+
+            if (previousPhase !== phaseNum && activePolygon && !manualOverride) {
+                animateZoneTransition(previousPhase, phaseNum);
+                return;
+            }
+
             if (activePolygon) map.removeLayer(activePolygon);
 
             const zone = zones[phaseNum];
@@ -1476,6 +1621,7 @@
         }
 
         function setMode(mode) {
+            if (zoneAnimationInterval) clearInterval(zoneAnimationInterval);
             const buttons = document.querySelectorAll('.btn');
             buttons.forEach(b => b.classList.remove('active'));
 
@@ -1587,9 +1733,21 @@
             renderTargetList();
         });
 
+        // GPS Filtering Logic (>30 meters accuracy threshold)
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(
                 (pos) => {
+                    const accuracy = pos.coords.accuracy;
+                    const gpsBadge = document.getElementById('gps-warning-badge');
+
+                    if (accuracy > 30) {
+                        gpsBadge.innerText = `📡 Weak GPS Signal (${Math.round(accuracy)}m error - position ignored)`;
+                        gpsBadge.style.display = 'block';
+                        return; 
+                    } else {
+                        gpsBadge.style.display = 'none';
+                    }
+
                     const lat = pos.coords.latitude;
                     const lng = pos.coords.longitude;
                     const now = Date.now();
