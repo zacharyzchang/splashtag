@@ -1339,9 +1339,9 @@
 
         const map = L.map('map', { zoomControl: false }).setView([49.2365, -122.9730], 15);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?apiKey=cb1_26zr_1_6bf24d0ce20fd9315d8cca83', {
+        L.tileLayer('https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_26zr_1_6bf24d0ce20fd9315d8cca83', {
             maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
         }).addTo(map);
 
         const zones = {
