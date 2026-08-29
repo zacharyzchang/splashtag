@@ -578,6 +578,43 @@
             text-transform: uppercase;
         }
 
+        /* Reinstated Flash Animation Overlay */
+        .reinstated-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3000;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(76, 175, 80, 0.6) 0%, rgba(0, 0, 0, 0.9) 80%);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .reinstated-overlay.active {
+            display: flex;
+            animation: reinstatedFlash 3s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+        }
+
+        @keyframes reinstatedFlash {
+            0% { opacity: 0; transform: scale(0.8); }
+            15% { opacity: 1; transform: scale(1.05); }
+            85% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.1); }
+        }
+
+        .reinstated-text {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #4CAF50;
+            text-shadow: 0 0 20px rgba(76, 175, 80, 0.8), 0 0 40px #000;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
         /* GPS Warning Badge */
         .gps-warning-badge {
             display: none;
@@ -667,7 +704,7 @@
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 48/48</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 53/53</div>
     </div>
 
     <div id="gps-warning-badge" class="gps-warning-badge">
@@ -706,6 +743,13 @@
         <div style="font-size: 3.5rem;">💀⚡</div>
         <div class="eliminated-text">YOU ARE OUT!</div>
         <div style="color: #fff; font-size: 0.9rem; margin-top: 6px; font-weight: bold;">You have been tagged and eliminated.</div>
+    </div>
+
+    <!-- Reinstated Flash Overlay -->
+    <div id="reinstated-overlay" class="reinstated-overlay">
+        <div style="font-size: 3.5rem;">❇️⚡</div>
+        <div class="reinstated-text">YOU ARE BACK IN!</div>
+        <div style="color: #fff; font-size: 0.9rem; margin-top: 6px; font-weight: bold;">You have been reinstated into the game!</div>
     </div>
 
     <!-- Live Elimination Announcement Banner -->
@@ -780,7 +824,76 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const players = [
+        // Audio Alert Synthesizer via Web Audio API
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const now = audioCtx.currentTime;
+
+            if (type === 'triumphant') {
+                // Triumphant fanfare chord progression (C5 - E5 - G5 - C6)
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.4);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.1);
+                    osc.stop(now + idx * 0.1 + 0.4);
+                });
+            } else if (type === 'sad') {
+                // Sad descending minor sound (G4 - Eb4 - C4)
+                const notes = [392.00, 311.13, 261.63];
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.2);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.2);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.2 + 0.5);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.2);
+                    osc.stop(now + idx * 0.2 + 0.5);
+                });
+            } else if (type === 'upbeat') {
+                // Upbeat rapid ascending chime (G4 - C5 - E5 - G5)
+                const notes = [392.00, 523.25, 659.25, 783.99];
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    gain.gain.setValueAtTime(0.25, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.3);
+                });
+            } else {
+                // Neutral ping alert sound
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, now); // D5
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        let players = [
             "Janz", "Aavin", "Baptiste", "Mia", "Tiemar",
             "Julia", "Eno", "Ethan", "Harrison", "Shaianne",
             "Mataya", "Philos", "Jamilee", "Asher", "Doris",
@@ -788,9 +901,10 @@
             "Acacia", "Amery", "Shawn", "Kylee", "Obed",
             "Bobby", "Braedan", "Richard", "Ev", "Felipe",
             "Liv", "Exaucé", "Sydney", "Micaila", "Soukina",
-            "Lake", "Betty", "Brenden", "Kaylan", "Mariah",
+            "Lake", "Betty", "Kaylan", "Mariah",
             "Chenay", "Jacob", "Owen", "Javier", "Ryan",
-            "Zoe", "Aidan", "Sofia"
+            "Zoe", "Aidan", "Sofia", "Jonathan", "Samuel",
+            "Davis", "Lisa", "Elijah", "Peyton"
         ];
 
         let selectedPlayerIndex = null;
@@ -807,13 +921,21 @@
         let gameCommencedAnnounced = false;
         let gameOverAnnounced = false;
         let previousTargetsList = [];
+        let revivalQueue = [];
 
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
         let totalTimeSpentOutside = 0; 
         let outOfBoundsStartTimestamp = null;
 
+        // Sync and listen to Revival Queue in Firebase
+        db.ref('game/revivalQueue').on('value', (snapshot) => {
+            revivalQueue = snapshot.val() || [];
+        });
+
         function populatePlayerDropdown() {
             const container = document.getElementById('player-selection-container');
+            const currentSelected = selectedPlayerIndex !== null ? players[selectedPlayerIndex] : null;
+            
             container.innerHTML = `
                 <select id="player-select" class="dropdown-select" onchange="changePlayer()">
                     <option value="" disabled selected>-- Select Name --</option>
@@ -824,6 +946,10 @@
                 const opt = document.createElement('option');
                 opt.value = index;
                 opt.innerText = player;
+                if (currentSelected === player) {
+                    opt.selected = true;
+                    selectedPlayerIndex = index;
+                }
                 playerSelect.appendChild(opt);
             });
         }
@@ -1002,6 +1128,10 @@
             } else if (cause === "Out of Bounds") {
                 htmlMsg = `🚨 <b>${victim}</b> was eliminated for being <b>Out of Bounds</b>!`;
                 logMsg = `🚨 <b>${victim}</b> was eliminated for being Out of Bounds`;
+            } else if (cause.startsWith("SWAP_REVIVAL:")) {
+                const revived = cause.split(":")[1];
+                htmlMsg = `🔄 <b>SWAP REVIVAL!</b> <b>${revived}</b> was reinstated as <b>${victim}</b> was eliminated!`;
+                logMsg = `🔄 <b>SWAP REVIVAL:</b> ${revived} returned to replace ${victim}`;
             } else {
                 htmlMsg = `💥 <b>${victim}</b> was eliminated by <b>${cause}</b>!`;
                 logMsg = `💥 <b>${victim}</b> was eliminated by <b>${cause}</b>`;
@@ -1017,6 +1147,20 @@
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             announcementLogs.unshift({ message: logMsg, time: timeStr });
             renderAnnouncementLogs();
+
+            // Handle Context-Specific Sound Alerts
+            if (selectedPlayerIndex !== null && !isAdmin) {
+                const myName = players[selectedPlayerIndex];
+                if (cause === myName) {
+                    playSound('triumphant'); // Played for the specific user when they eliminate a target
+                } else if (victim === myName) {
+                    playSound('sad'); // Played when the user is eliminated by someone else
+                } else {
+                    playSound('neutral'); // Neutral sound for other announcements
+                }
+            } else {
+                playSound('neutral');
+            }
         }
 
         function triggerTargetSwapAnimation() {
@@ -1035,6 +1179,19 @@
             overlay.classList.remove('active');
             void overlay.offsetWidth; 
             overlay.classList.add('active');
+
+            setTimeout(() => {
+                overlay.classList.remove('active');
+            }, 3000);
+        }
+
+        function triggerReinstatedAnimation() {
+            const overlay = document.getElementById('reinstated-overlay');
+            overlay.classList.remove('active');
+            void overlay.offsetWidth; 
+            overlay.classList.add('active');
+
+            playSound('upbeat'); // Upbeat alert sound for the user when reinstated
 
             setTimeout(() => {
                 overlay.classList.remove('active');
@@ -1068,6 +1225,7 @@
             const newEliminated = snapshot.val() || {};
 
             if (!isInitialLoad) {
+                // Check for newly eliminated players
                 Object.keys(newEliminated).forEach(player => {
                     if (!globalEliminated[player]) {
                         const cause = userEliminations[player] || "Out of Bounds";
@@ -1075,6 +1233,15 @@
 
                         if (selectedPlayerIndex !== null && !isAdmin && player === players[selectedPlayerIndex]) {
                             triggerEliminatedAnimation();
+                        }
+                    }
+                });
+
+                // Check for reinstated players
+                Object.keys(globalEliminated).forEach(player => {
+                    if (!newEliminated[player]) {
+                        if (selectedPlayerIndex !== null && !isAdmin && player === players[selectedPlayerIndex]) {
+                            triggerReinstatedAnimation();
                         }
                     }
                 });
@@ -1160,6 +1327,7 @@
             
             textEl.innerHTML = `📢 <b>ANNOUNCEMENT:</b> ${data.text}`;
             banner.style.display = 'block';
+            playSound('neutral');
 
             setTimeout(() => {
                 banner.style.display = 'none';
@@ -1298,6 +1466,42 @@
             alert(`Tag request sent to ${targetName}! Awaiting their confirmation.`);
         }
 
+        function processEliminationAndSwap(eliminatedPlayer, attackerName) {
+            const now = new Date();
+            const minutes = now.getHours() * 60 + now.getMinutes();
+            const cutoffMinutes = 16 * 60 + 30; // 4:30 PM cutoff
+
+            if (minutes < cutoffMinutes) {
+                // Next Elimination Swap Active
+                if (revivalQueue.length > 0) {
+                    const revivedPlayer = revivalQueue.shift(); // Oldest queued player re-enters
+
+                    revivalQueue.push(eliminatedPlayer); // Newly eliminated enters queue
+
+                    // Update state without changing local session/account array
+                    db.ref('game/revivalQueue').set(revivalQueue);
+                    db.ref('game/eliminated/' + revivedPlayer).remove();
+                    db.ref('game/eliminated/' + eliminatedPlayer).set(true);
+
+                    if (attackerName) {
+                        db.ref('game/eliminatedBy/' + eliminatedPlayer).set(attackerName);
+                    }
+
+                    triggerAnnouncement(eliminatedPlayer, `SWAP_REVIVAL:${revivedPlayer}`);
+                    return;
+                } else {
+                    revivalQueue.push(eliminatedPlayer);
+                    db.ref('game/revivalQueue').set(revivalQueue);
+                }
+            }
+
+            // Normal elimination execution
+            if (attackerName) {
+                db.ref('game/eliminatedBy/' + eliminatedPlayer).set(attackerName);
+            }
+            db.ref('game/eliminated/' + eliminatedPlayer).set(true);
+        }
+
         function respondToTag(action) {
             if (selectedPlayerIndex === null || isAdmin) return;
             const myName = players[selectedPlayerIndex];
@@ -1305,10 +1509,7 @@
             const attackerName = modal.getAttribute('data-attacker');
 
             if (action === 'confirm') {
-                if (attackerName) {
-                    db.ref('game/eliminatedBy/' + myName).set(attackerName);
-                }
-                db.ref('game/eliminated/' + myName).set(true);
+                processEliminationAndSwap(myName, attackerName);
                 db.ref('game/pendingTags/' + myName).remove();
                 modal.style.display = 'none';
                 triggerEliminatedAnimation();
@@ -1497,8 +1698,7 @@
                         document.getElementById('warning-card').style.display = 'none';
                         db.ref('game/outOfBoundsStart/' + myName).remove();
                         db.ref('game/outOfBoundsTime/' + myName).set(TOTAL_GRACE_PERIOD);
-                        db.ref('game/eliminatedBy/' + myName).set("Out of Bounds");
-                        db.ref('game/eliminated/' + myName).set(true);
+                        processEliminationAndSwap(myName, "Out of Bounds");
                         alert(`⚠️ You were eliminated for exceeding your total 15-minute out of bounds allowance!`);
                     }
                 } else {
@@ -1658,7 +1858,7 @@
         }
 
         let lastFirebaseUpdate = 0;
-        const UPDATE_INTERVAL = 5 * 60 * 1000;
+        const UPDATE_INTERVAL = 30 * 1000; // Updated to 30s interval for responsive player rendering
 
         function renderAllPlayerMarkers() {
             let activeTargets = [];
@@ -1677,15 +1877,20 @@
                 }
             }
 
+            // Clean up existing markers to ensure fresh draw
+            Object.keys(playerMarkers).forEach(name => {
+                if (!cachedLocations[name] || (selectedPlayerIndex !== null && !isAdmin && name === players[selectedPlayerIndex])) {
+                    map.removeLayer(playerMarkers[name]);
+                    delete playerMarkers[name];
+                }
+            });
+
             Object.keys(cachedLocations).forEach(name => {
                 const data = cachedLocations[name];
+                if (!data || !data.lat || !data.lng) return;
 
                 if (selectedPlayerIndex !== null && !isAdmin && name === players[selectedPlayerIndex]) {
-                    if (playerMarkers[name]) {
-                        map.removeLayer(playerMarkers[name]);
-                        delete playerMarkers[name];
-                    }
-                    return;
+                    return; // Skip rendering separate circle marker for own local user
                 }
 
                 const isEliminated = !!globalEliminated[name];
