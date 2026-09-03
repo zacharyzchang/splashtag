@@ -463,6 +463,7 @@
 
         .admin-btn-announce { background: #9333ea; }
         .admin-btn-pause { background: #eab308; color: #000; }
+        .admin-btn-disqualify { background: #dc2626; }
         .admin-btn-reset { background: #ef4444; }
         .admin-btn-logout { background: #475569; color: #fff; margin-top: 6px; }
 
@@ -670,6 +671,16 @@
                     <li style="color: #666; font-size: 0.8rem;">Select your name above.</li>
                 </ul>
             </div>
+
+            <!-- Player Visible Leaderboard -->
+            <div class="targets-container" style="margin-top: 14px; background: #1c1917; border-color: #eab308;">
+                <div class="target-title" style="color: #fde047;">
+                    <span>🏆 Top Leaderboard</span>
+                </div>
+                <ul id="player-leaderboard-list" class="target-list">
+                    <li style="color: #aaa; font-size: 0.8rem; text-align: center;">No eliminations logged yet.</li>
+                </ul>
+            </div>
         </div>
 
         <!-- Admin Control Panel -->
@@ -687,6 +698,23 @@
             <button id="admin-pause-tagging-btn" class="admin-btn admin-btn-pause" onclick="adminTogglePauseTagging()" style="background: #f97316; color: #fff;">
                 ⏸️ Pause Tagging
             </button>
+            <button id="admin-pause-swaps-btn" class="admin-btn admin-btn-pause" onclick="adminTogglePauseSwaps()" style="background: #06b6d4; color: #fff;">
+                🔄 Pause Swap Revivals
+            </button>
+            
+            <!-- Admin Disqualify Section -->
+            <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid #ef4444; border-radius: 8px; padding: 10px; margin-top: 4px;">
+                <div class="target-title" style="color: #fca5a5; margin-bottom: 6px;">
+                    <span>⛔ Disqualify Player</span>
+                </div>
+                <select id="disqualify-player-select" class="dropdown-select" style="margin-bottom: 8px; font-size: 0.8rem; padding: 6px;">
+                    <option value="" disabled selected>-- Select Player --</option>
+                </select>
+                <button class="admin-btn admin-btn-disqualify" onclick="adminDisqualifyPlayer()">
+                    🚨 Disqualify Selected
+                </button>
+            </div>
+
             <button class="admin-btn admin-btn-reset" onclick="adminResetAllTimers()">
                 🔄 Reset All OOB Timers
             </button>
@@ -715,7 +743,7 @@
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 53/53</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 52/52</div>
     </div>
 
     <div id="gps-warning-badge" class="gps-warning-badge">
@@ -844,7 +872,6 @@
             const now = audioCtx.currentTime;
 
             if (type === 'triumphant') {
-                // Triumphant fanfare chord progression (C5 - E5 - G5 - C6)
                 const notes = [523.25, 659.25, 783.99, 1046.50];
                 notes.forEach((freq, idx) => {
                     const osc = audioCtx.createOscillator();
@@ -859,7 +886,6 @@
                     osc.stop(now + idx * 0.1 + 0.4);
                 });
             } else if (type === 'sad') {
-                // Sad descending minor sound (G4 - Eb4 - C4)
                 const notes = [392.00, 311.13, 261.63];
                 notes.forEach((freq, idx) => {
                     const osc = audioCtx.createOscillator();
@@ -874,7 +900,6 @@
                     osc.stop(now + idx * 0.2 + 0.5);
                 });
             } else if (type === 'upbeat') {
-                // Upbeat rapid ascending chime (G4 - C5 - E5 - G5)
                 const notes = [392.00, 523.25, 659.25, 783.99];
                 notes.forEach((freq, idx) => {
                     const osc = audioCtx.createOscillator();
@@ -889,11 +914,10 @@
                     osc.stop(now + idx * 0.08 + 0.3);
                 });
             } else {
-                // Neutral ping alert sound
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(587.33, now); // D5
+                osc.frequency.setValueAtTime(587.33, now); 
                 gain.gain.setValueAtTime(0.2, now);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
                 osc.connect(gain);
@@ -907,9 +931,9 @@
             "Janz", "Aavin", "Baptiste", "Mia", "Haonhu",
             "Julia", "Eno", "Ethan", "Harrison",
             "Mataya", "Philos", "Jamilee", "Asher", "Doris",
-            "Simon", "Zachary", "Erin", "Joshua",
+            "Simon", "Zachary", "Brenden", "Joshua",
             "Acacia", "Amery", "Shawn", "Kylee", "Obed",
-            "Bobby", "Braedan", "Richard", "Ev", "Felipe",
+            "Bobby", "Braedan", "Richard", "Felipe",
             "Liv", "Exaucé", "Sydney", "Micaila", "Soukina",
             "Lake", "Betty", "Kaylan", "Mariah",
             "Chenay", "Jacob", "Owen", "Javier", "Ryan",
@@ -921,6 +945,7 @@
         let isAdmin = false;
         let isOobPaused = false;
         let isTaggingPaused = false;
+        let isSwapRevivalsPaused = false;
         let globalEliminated = {}; 
         let userEliminations = {}; 
         let eliminationCounts = {};
@@ -939,7 +964,6 @@
         let totalTimeSpentOutside = 0; 
         let outOfBoundsStartTimestamp = null;
 
-        // Sync and listen to Revival Queue in Firebase
         db.ref('game/revivalQueue').on('value', (snapshot) => {
             revivalQueue = snapshot.val() || [];
         });
@@ -967,6 +991,21 @@
         }
         populatePlayerDropdown();
 
+        function populateDisqualifyDropdown() {
+            const disSelect = document.getElementById('disqualify-player-select');
+            if (!disSelect) return;
+
+            disSelect.innerHTML = '<option value="" disabled selected>-- Select Player --</option>';
+            players.forEach((player) => {
+                if (!globalEliminated[player]) {
+                    const opt = document.createElement('option');
+                    opt.value = player;
+                    opt.innerText = player;
+                    disSelect.appendChild(opt);
+                }
+            });
+        }
+
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
         }
@@ -991,6 +1030,7 @@
                 document.getElementById('admin-panel').style.display = 'flex';
                 document.getElementById('help-btn').style.display = 'none';
 
+                populateDisqualifyDropdown();
                 renderAdminLeaderboard();
                 alert("Admin access granted.");
             } else if (pin !== null) {
@@ -1038,7 +1078,6 @@
             renderTargetList();
             renderAllPlayerMarkers();
             
-            // Check if a tag was claimed while offline/logged out
             checkPendingTagForCurrentPlayer();
         }
 
@@ -1084,6 +1123,21 @@
             }
         });
 
+        db.ref('game/swapRevivalsPaused').on('value', (snapshot) => {
+            isSwapRevivalsPaused = !!snapshot.val();
+            const btn = document.getElementById('admin-pause-swaps-btn');
+
+            if (btn) {
+                if (isSwapRevivalsPaused) {
+                    btn.innerText = "▶️ Resume Swap Revivals";
+                    btn.style.background = "#22c55e";
+                } else {
+                    btn.innerText = "🔄 Pause Swap Revivals";
+                    btn.style.background = "#06b6d4";
+                }
+            }
+        });
+
         function adminSendAnnouncement() {
             const text = prompt("Enter broadcast announcement text:");
             if (text && text.trim() !== "") {
@@ -1104,6 +1158,27 @@
             db.ref('game/taggingPaused').set(!isTaggingPaused);
         }
 
+        function adminTogglePauseSwaps() {
+            db.ref('game/swapRevivalsPaused').set(!isSwapRevivalsPaused);
+        }
+
+        function adminDisqualifyPlayer() {
+            const disSelect = document.getElementById('disqualify-player-select');
+            const targetPlayer = disSelect ? disSelect.value : null;
+
+            if (!targetPlayer) {
+                alert("Please select a player to disqualify.");
+                return;
+            }
+
+            if (confirm(`Are you sure you want to DISQUALIFY ${targetPlayer}?`)) {
+                processEliminationAndSwap(targetPlayer, "ADMIN DISQUALIFICATION");
+                sendTelegramNotification(`⛔ <b>ADMIN DISQUALIFICATION:</b>\n${targetPlayer} was disqualified by the organizer.`);
+                alert(`${targetPlayer} has been disqualified.`);
+                populateDisqualifyDropdown();
+            }
+        }
+
         function adminResetAllTimers() {
             if (confirm("Reset ALL players' out of bounds timers back to 0 minutes?")) {
                 db.ref('game/outOfBoundsTime').remove();
@@ -1112,10 +1187,8 @@
             }
         }
 
-        function renderAdminLeaderboard() {
-            if (!isAdmin) return;
-
-            const leaderboardEl = document.getElementById('admin-leaderboard-list');
+        function renderLeaderboardToElement(elementId) {
+            const leaderboardEl = document.getElementById(elementId);
             if (!leaderboardEl) return;
 
             const sorted = Object.entries(eliminationCounts)
@@ -1143,6 +1216,15 @@
                 `;
                 leaderboardEl.appendChild(li);
             });
+        }
+
+        function renderPlayerLeaderboard() {
+            renderLeaderboardToElement('player-leaderboard-list');
+        }
+
+        function renderAdminLeaderboard() {
+            if (!isAdmin) return;
+            renderLeaderboardToElement('admin-leaderboard-list');
         }
 
         function promptQuestion() {
@@ -1177,6 +1259,9 @@
             } else if (cause === "Out of Bounds") {
                 htmlMsg = `🚨 <b>${victim}</b> was eliminated for being <b>Out of Bounds</b>!`;
                 logMsg = `🚨 <b>${victim}</b> was eliminated for being Out of Bounds`;
+            } else if (cause === "ADMIN DISQUALIFICATION") {
+                htmlMsg = `⛔ <b>${victim}</b> was <b>Disqualified</b> by the organizer!`;
+                logMsg = `⛔ <b>${victim}</b> was Disqualified by organizer`;
             } else if (cause.startsWith("SWAP_REVIVAL:")) {
                 const revived = cause.split(":")[1];
                 htmlMsg = `🔄 <b>SWAP REVIVAL!</b> <b>${revived}</b> was reinstated as <b>${victim}</b> was eliminated!`;
@@ -1197,15 +1282,14 @@
             announcementLogs.unshift({ message: logMsg, time: timeStr });
             renderAnnouncementLogs();
 
-            // Handle Context-Specific Sound Alerts
             if (selectedPlayerIndex !== null && !isAdmin) {
                 const myName = players[selectedPlayerIndex];
                 if (cause === myName) {
-                    playSound('triumphant'); // Played for the specific user when they eliminate a target
+                    playSound('triumphant');
                 } else if (victim === myName) {
-                    playSound('sad'); // Played when the user is eliminated by someone else
+                    playSound('sad');
                 } else {
-                    playSound('neutral'); // Neutral sound for other announcements
+                    playSound('neutral');
                 }
             } else {
                 playSound('neutral');
@@ -1240,7 +1324,7 @@
             void overlay.offsetWidth; 
             overlay.classList.add('active');
 
-            playSound('upbeat'); // Upbeat alert sound for the user when reinstated
+            playSound('upbeat');
 
             setTimeout(() => {
                 overlay.classList.remove('active');
@@ -1274,7 +1358,6 @@
             const newEliminated = snapshot.val() || {};
 
             if (!isInitialLoad) {
-                // Check for newly eliminated players
                 Object.keys(newEliminated).forEach(player => {
                     if (!globalEliminated[player]) {
                         const cause = userEliminations[player] || "Out of Bounds";
@@ -1286,7 +1369,6 @@
                     }
                 });
 
-                // Check for reinstated players
                 Object.keys(globalEliminated).forEach(player => {
                     if (!newEliminated[player]) {
                         if (selectedPlayerIndex !== null && !isAdmin && player === players[selectedPlayerIndex]) {
@@ -1302,6 +1384,7 @@
             checkTargetSwap();
             renderTargetList();
             renderAllPlayerMarkers();
+            if (isAdmin) populateDisqualifyDropdown();
         });
 
         db.ref('game/eliminatedBy').on('value', (snapshot) => {
@@ -1313,6 +1396,7 @@
         db.ref('game/eliminationCounts').on('value', (snapshot) => {
             eliminationCounts = snapshot.val() || {};
             renderTargetList();
+            renderPlayerLeaderboard();
             if (isAdmin) {
                 renderAdminLeaderboard();
             }
@@ -1526,22 +1610,16 @@
         }
 
         function processEliminationAndSwap(eliminatedPlayer, attackerName) {
-            if (attackerName) {
+            if (attackerName && attackerName !== "ADMIN DISQUALIFICATION") {
                 db.ref('game/eliminationCounts/' + attackerName).transaction((current) => (current || 0) + 1);
             }
 
-            const now = new Date();
-            const minutes = now.getHours() * 60 + now.getMinutes();
-            const cutoffMinutes = 16 * 60 + 30; // 4:30 PM cutoff
-
-            if (minutes < cutoffMinutes) {
-                // Next Elimination Swap Active
+            if (!isSwapRevivalsPaused) {
                 if (revivalQueue.length > 0) {
-                    const revivedPlayer = revivalQueue.shift(); // Oldest queued player re-enters
+                    const revivedPlayer = revivalQueue.shift();
 
-                    revivalQueue.push(eliminatedPlayer); // Newly eliminated enters queue
+                    revivalQueue.push(eliminatedPlayer);
 
-                    // Update state without changing local session/account array
                     db.ref('game/revivalQueue').set(revivalQueue);
                     db.ref('game/eliminated/' + revivedPlayer).remove();
                     db.ref('game/eliminated/' + eliminatedPlayer).set(true);
@@ -1558,7 +1636,6 @@
                 }
             }
 
-            // Normal elimination execution
             if (attackerName) {
                 db.ref('game/eliminatedBy/' + eliminatedPlayer).set(attackerName);
             }
@@ -1916,7 +1993,7 @@
         }
 
         let lastFirebaseUpdate = 0;
-        const UPDATE_INTERVAL = 30 * 1000; // Updated to 30s interval for responsive player rendering
+        const UPDATE_INTERVAL = 30 * 1000;
 
         function renderAllPlayerMarkers() {
             let activeTargets = [];
@@ -1935,7 +2012,6 @@
                 }
             }
 
-            // Clean up existing markers to ensure fresh draw
             Object.keys(playerMarkers).forEach(name => {
                 if (!cachedLocations[name] || (selectedPlayerIndex !== null && !isAdmin && name === players[selectedPlayerIndex])) {
                     map.removeLayer(playerMarkers[name]);
@@ -1948,7 +2024,7 @@
                 if (!data || !data.lat || !data.lng) return;
 
                 if (selectedPlayerIndex !== null && !isAdmin && name === players[selectedPlayerIndex]) {
-                    return; // Skip rendering separate circle marker for own local user
+                    return;
                 }
 
                 const isEliminated = !!globalEliminated[name];
