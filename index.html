@@ -743,7 +743,7 @@
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 50/50</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 51/51</div>
     </div>
 
     <div id="gps-warning-badge" class="gps-warning-badge">
@@ -862,6 +862,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Track whether player has enabled location access
+        let hasLocationAccess = false;
+
         // Audio Alert Synthesizer via Web Audio API
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -938,7 +941,8 @@
             "Lake", "Betty", "Kaylan", "Mariah",
             "Chenay", "Jacob", "Owen", "Javier", "Ryan",
             "Zoe", "Aidan", "Sofia", "Jonathan", "Samuel",
-            "Davis", "Lisa", "Elijah", "Peyton", "Carlos", "Ann"
+            "Davis", "Lisa", "Elijah", "Peyton", "Carlos", "Ann",
+            "Solomon"
         ];
 
         let selectedPlayerIndex = null;
@@ -1032,6 +1036,7 @@
 
                 populateDisqualifyDropdown();
                 renderAdminLeaderboard();
+                renderAllPlayerMarkers();
                 alert("Admin access granted.");
             } else if (pin !== null) {
                 alert("Incorrect PIN code.");
@@ -1525,6 +1530,12 @@
             const myEliminatedCount = eliminationCounts[playerName] || 0;
             document.getElementById('my-eliminated-count').innerText = `Your Eliminations: ${myEliminatedCount}`;
 
+            if (!hasLocationAccess) {
+                targetListEl.innerHTML = '<li style="color: #ff9800; font-size: 0.8rem; text-align: center; padding: 10px;">⚠️ Enable location access to view active targets!</li>';
+                targetedByListEl.innerHTML = '<li style="color: #ff9800; font-size: 0.8rem; text-align: center; padding: 6px 0;">⚠️ Location access disabled</li>';
+                return;
+            }
+
             if (globalEliminated[playerName]) {
                 targetListEl.innerHTML = '<li style="color: #ff5252; padding: 12px; text-align: center; font-weight: bold;">💀 YOU ARE ELIMINATED 💀</li>';
                 targetedByListEl.innerHTML = '<li style="color: #666; font-size: 0.8rem; text-align: center; padding: 6px 0;">None</li>';
@@ -1593,6 +1604,11 @@
         function tagTarget(targetName, event) {
             event.preventDefault();
             if (selectedPlayerIndex === null || isAdmin) return;
+
+            if (!hasLocationAccess) {
+                alert("⚠️ You must enable location access before claiming tags!");
+                return;
+            }
 
             if (isTaggingPaused) {
                 alert("🛑 Tagging is currently PAUSED by the organizer!");
@@ -1788,7 +1804,7 @@
         }
 
         function checkZoneBoundaries(phaseNum) {
-            if (selectedPlayerIndex === null || isAdmin || isOobPaused) {
+            if (selectedPlayerIndex === null || isAdmin || isOobPaused || !hasLocationAccess) {
                 document.getElementById('warning-card').style.display = 'none';
                 document.getElementById('buffer-card').style.display = 'none';
                 return;
@@ -1996,6 +2012,15 @@
         const UPDATE_INTERVAL = 30 * 1000;
 
         function renderAllPlayerMarkers() {
+            // If location access is disabled and not admin, remove all player markers
+            if (!hasLocationAccess && !isAdmin) {
+                Object.keys(playerMarkers).forEach(name => {
+                    map.removeLayer(playerMarkers[name]);
+                    delete playerMarkers[name];
+                });
+                return;
+            }
+
             let activeTargets = [];
             let huntersTargetingMe = [];
 
@@ -2094,6 +2119,7 @@
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(
                 (pos) => {
+                    hasLocationAccess = true;
                     const lat = pos.coords.latitude;
                     const lng = pos.coords.longitude;
                     const now = Date.now();
@@ -2128,8 +2154,20 @@
                         });
                         lastFirebaseUpdate = now;
                     }
+
+                    renderAllPlayerMarkers();
+                    renderTargetList();
                 },
-                (err) => console.warn("GPS Access Denied/Unavailable"),
+                (err) => {
+                    console.warn("GPS Access Denied/Unavailable");
+                    hasLocationAccess = false;
+                    if (playerMarker) {
+                        map.removeLayer(playerMarker);
+                        playerMarker = null;
+                    }
+                    renderAllPlayerMarkers();
+                    renderTargetList();
+                },
                 { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
             );
         }
