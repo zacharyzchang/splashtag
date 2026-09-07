@@ -692,6 +692,20 @@
             <button class="admin-btn admin-btn-announce" onclick="adminSendAnnouncement()">
                 📢 Send Broadcast
             </button>
+
+            <!-- Admin Private Message Section -->
+            <div style="background: rgba(147, 51, 234, 0.15); border: 1px solid #9333ea; border-radius: 8px; padding: 10px; margin-top: 4px;">
+                <div class="target-title" style="color: #c084fc; margin-bottom: 6px;">
+                    <span>📩 Send Private Message</span>
+                </div>
+                <select id="private-msg-player-select" class="dropdown-select" style="margin-bottom: 8px; font-size: 0.8rem; padding: 6px;">
+                    <option value="" disabled selected>-- Select Player --</option>
+                </select>
+                <button class="admin-btn" style="background: #9333ea;" onclick="adminSendPrivateMessage()">
+                    💬 Send Direct Message
+                </button>
+            </div>
+
             <button id="admin-pause-btn" class="admin-btn admin-btn-pause" onclick="adminTogglePauseTimer()">
                 ⏸️ Pause OOB Timers
             </button>
@@ -942,8 +956,8 @@
             "Chenay", "Jacob", "Owen", "Javier", "Ryan",
             "Zoe", "Aidan", "Sofia", "Jonathan", "Samuel",
             "Davis", "Lisa", "Elijah", "Peyton", "Carlos", "Ann",
-            "Solomon", "Massi", "Charlie", "Lionnel",
-            "Jessica", "Daniel", "Extra"
+            "Solomon", "Massi", "Charlie", "Lionnel", "Extra",
+            "Jessica", "Daniel"
         ];
 
         let selectedPlayerIndex = null;
@@ -1011,6 +1025,21 @@
             });
         }
 
+        function populatePrivateMsgDropdown() {
+            const pmSelect = document.getElementById('private-msg-player-select');
+            if (!pmSelect) return;
+
+            pmSelect.innerHTML = '<option value="" disabled selected>-- Select Player --</option>';
+            players.forEach((player) => {
+                if (!globalEliminated[player]) {
+                    const opt = document.createElement('option');
+                    opt.value = player;
+                    opt.innerText = player;
+                    pmSelect.appendChild(opt);
+                }
+            });
+        }
+
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
         }
@@ -1036,6 +1065,7 @@
                 document.getElementById('help-btn').style.display = 'none';
 
                 populateDisqualifyDropdown();
+                populatePrivateMsgDropdown();
                 renderAdminLeaderboard();
                 renderAllPlayerMarkers();
                 alert("Admin access granted.");
@@ -1156,6 +1186,26 @@
             }
         }
 
+        function adminSendPrivateMessage() {
+            const selectEl = document.getElementById('private-msg-player-select');
+            const targetPlayer = selectEl ? selectEl.value : null;
+
+            if (!targetPlayer) {
+                alert("Please select a player to message.");
+                return;
+            }
+
+            const text = prompt(`Enter private message for ${targetPlayer}:`);
+            if (text && text.trim() !== "") {
+                db.ref(`game/messages/${targetPlayer}`).push({
+                    text: text.trim(),
+                    read: false,
+                    timestamp: Date.now()
+                });
+                alert(`Private message sent to ${targetPlayer}!`);
+            }
+        }
+
         function adminTogglePauseTimer() {
             db.ref('game/oobPaused').set(!isOobPaused);
         }
@@ -1182,6 +1232,7 @@
                 sendTelegramNotification(`⛔ <b>ADMIN DISQUALIFICATION:</b>\n${targetPlayer} was disqualified by the organizer.`);
                 alert(`${targetPlayer} has been disqualified.`);
                 populateDisqualifyDropdown();
+                populatePrivateMsgDropdown();
             }
         }
 
@@ -1390,7 +1441,10 @@
             checkTargetSwap();
             renderTargetList();
             renderAllPlayerMarkers();
-            if (isAdmin) populateDisqualifyDropdown();
+            if (isAdmin) {
+                populateDisqualifyDropdown();
+                populatePrivateMsgDropdown();
+            }
         });
 
         db.ref('game/eliminatedBy').on('value', (snapshot) => {
