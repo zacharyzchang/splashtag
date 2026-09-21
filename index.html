@@ -397,6 +397,34 @@
             transition: all 0.2s ease;
         }
 
+        .dispute-item {
+            background: #2a1a08;
+            border: 1px solid #ff9800;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+
+        .dispute-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .dispute-btn {
+            flex: 1;
+            padding: 6px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .dispute-btn-confirm { background: #ef4444; color: #fff; }
+        .dispute-btn-reject { background: #3b82f6; color: #fff; }
+
         .target-info {
             display: flex;
             align-items: center;
@@ -437,6 +465,23 @@
             align-items: center;
             justify-content: center;
             gap: 6px;
+        }
+
+        .create-profile-btn {
+            width: 100%;
+            padding: 8px;
+            background: #00e676;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
         }
 
         /* Admin Controls Block */
@@ -651,6 +696,10 @@
             </select>
         </div>
 
+        <button class="create-profile-btn" onclick="createNewPlayerProfile()">
+            ➕ Create New Player Profile
+        </button>
+
         <!-- Standard Player Targets Container -->
         <div id="player-views-container">
             <div class="targets-container">
@@ -687,6 +736,16 @@
         <div id="admin-panel" class="targets-container admin-controls-container" style="display: none; border-color: #a855f7;">
             <div class="target-title" style="color: #c084fc;">
                 <span>Admin Actions</span>
+            </div>
+
+            <!-- Pending Tag Disputes Block -->
+            <div style="background: rgba(255, 152, 0, 0.15); border: 1px solid #ff9800; border-radius: 8px; padding: 10px;">
+                <div class="target-title" style="color: #ffb74d; margin-bottom: 6px;">
+                    <span>⚠️ Tag Disputes</span>
+                </div>
+                <div id="disputes-list">
+                    <div style="color: #aaa; font-size: 0.8rem; text-align: center;">No active disputes</div>
+                </div>
             </div>
 
             <button class="admin-btn admin-btn-announce" onclick="adminSendAnnouncement()">
@@ -757,7 +816,7 @@
         <div class="status-title">Active Play Zone</div>
         <div id="phase-label" class="status-phase">Phase 1: Full Area</div>
         <div id="time-label" class="status-timer">Clock: --:--</div>
-        <div id="players-remaining-label" class="status-remaining">Players Remaining: 54/54</div>
+        <div id="players-remaining-label" class="status-remaining">Players Remaining: 0/0</div>
     </div>
 
     <div id="gps-warning-badge" class="gps-warning-badge">
@@ -944,27 +1003,11 @@
             }
         }
 
-        let players = [
-            "Janz", "Aavin", "Beatrice", "Mia", "Haonhu",
-            "Julia", "Eno", "Ethan", "Harrison",
-            "Philos", "Jamilee", "Asher", "Doris",
-            "ShaeLee", "Zachary", "Brenden", "Joshua",
-            "Amery", "Shawn", "Kylee", "Obed",
-            "Bobby", "Braedan", "Richard", "Felipe",
-            "Exaucé", "Micaila", "Soukina",
-            "Lake", "Betty", "Kaylan", "Mariah",
-            "Chenay", "Jacob", "Owen", "Javier", "Ryan",
-            "Zoe", "Aidan", "Sofia", "Jonathan", "Samuel",
-            "Davis", "Lisa", "Elijah", "Peyton", "Carlos", "Ann",
-            "Solomon", "Massi", "Charlie", "Lionnel", "Extra",
-            "Jessica", "Daniel"
-        ];
+        // Preset hardcoded players removed to rely purely on Firebase state
+        let players = [];
 
         // Assign hidden numbers sequentially to each player
         let playerNumbers = {};
-        players.forEach((p, idx) => {
-            playerNumbers[p] = idx;
-        });
 
         // Store history of removed numbers for reinstatement assignment
         let removedNumbersHistory = [];
@@ -982,15 +1025,35 @@
         let cachedLocations = {}; 
         let isInitialLoad = true;
         let announcementLogs = [];
-        let gameCommencedAnnounced = false;
-        let gameOverAnnounced = false;
         let previousTargetsList = [];
         let revivalQueue = [];
         let currentPendingTags = {};
+        let tagDisputes = {};
 
         const TOTAL_GRACE_PERIOD = 15 * 60 * 1000;
         let totalTimeSpentOutside = 0; 
         let outOfBoundsStartTimestamp = null;
+
+        db.ref('game/playersList').on('value', (snapshot) => {
+            const val = snapshot.val();
+            players = (val && Array.isArray(val)) ? val : [];
+            
+            // Re-bind selected player index by name to avoid shifts or null pointer issues
+            if (selectedPlayerIndex !== null && players.length > 0) {
+                const prevName = players[selectedPlayerIndex];
+                const newIdx = players.indexOf(prevName);
+                if (newIdx !== -1) {
+                    selectedPlayerIndex = newIdx;
+                }
+            }
+
+            populatePlayerDropdown();
+            updateRemainingPlayersCount();
+            if (isAdmin) {
+                populateDisqualifyDropdown();
+                populatePrivateMsgDropdown();
+            }
+        });
 
         db.ref('game/revivalQueue').on('value', (snapshot) => {
             revivalQueue = snapshot.val() || [];
@@ -1000,11 +1063,20 @@
             const val = snapshot.val();
             if (val) {
                 playerNumbers = val;
+            } else {
+                playerNumbers = {};
             }
         });
 
         db.ref('game/removedNumbersHistory').on('value', (snapshot) => {
             removedNumbersHistory = snapshot.val() || [];
+        });
+
+        db.ref('game/tagDisputes').on('value', (snapshot) => {
+            tagDisputes = snapshot.val() || {};
+            if (isAdmin) {
+                renderDisputesList();
+            }
         });
 
         function populatePlayerDropdown() {
@@ -1028,7 +1100,35 @@
                 playerSelect.appendChild(opt);
             });
         }
-        populatePlayerDropdown();
+
+        function createNewPlayerProfile() {
+            const name = prompt("Enter the new player's name:");
+            if (!name || !name.trim()) return;
+
+            const trimmedName = name.trim();
+            if (players.includes(trimmedName)) {
+                alert("A player with this name already exists!");
+                return;
+            }
+
+            players.push(trimmedName);
+
+            // Assign next hidden sequential number
+            const assignedNumber = Object.keys(playerNumbers).length;
+            playerNumbers[trimmedName] = assignedNumber;
+
+            db.ref('game/playersList').set(players);
+            db.ref('game/playerNumbers').set(playerNumbers);
+
+            populatePlayerDropdown();
+            updateRemainingPlayersCount();
+            if (isAdmin) {
+                populateDisqualifyDropdown();
+                populatePrivateMsgDropdown();
+            }
+
+            alert(`Player profile created for "${trimmedName}"!`);
+        }
 
         function populateDisqualifyDropdown() {
             const disSelect = document.getElementById('disqualify-player-select');
@@ -1060,6 +1160,48 @@
             });
         }
 
+        function renderDisputesList() {
+            const container = document.getElementById('disputes-list');
+            if (!container) return;
+
+            const keys = Object.keys(tagDisputes);
+            if (keys.length === 0) {
+                container.innerHTML = '<div style="color: #aaa; font-size: 0.8rem; text-align: center;">No active disputes</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            keys.forEach(targetName => {
+                const dispute = tagDisputes[targetName];
+                const item = document.createElement('div');
+                item.className = 'dispute-item';
+                item.innerHTML = `
+                    <div><strong>Target:</strong> ${targetName}</div>
+                    <div><strong>Tagger:</strong> ${dispute.taggedBy}</div>
+                    <div style="margin-top: 4px; font-style: italic; color: #ffcc80;">"${dispute.reason}"</div>
+                    <div class="dispute-actions">
+                        <button class="dispute-btn dispute-btn-confirm" onclick="adminResolveDispute('${targetName}', true)">Confirm Tag</button>
+                        <button class="dispute-btn dispute-btn-reject" onclick="adminResolveDispute('${targetName}', false)">Reject Dispute</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function adminResolveDispute(targetName, confirmElimination) {
+            const dispute = tagDisputes[targetName];
+            if (!dispute) return;
+
+            if (confirmElimination) {
+                processEliminationAndSwap(targetName, dispute.taggedBy);
+                alert(`Tag confirmed! ${targetName} is eliminated.`);
+            } else {
+                alert(`Tag dispute rejected. ${targetName} remains active.`);
+            }
+
+            db.ref('game/tagDisputes/' + targetName).remove();
+        }
+
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
         }
@@ -1086,6 +1228,7 @@
 
                 populateDisqualifyDropdown();
                 populatePrivateMsgDropdown();
+                renderDisputesList();
                 renderAdminLeaderboard();
                 renderAllPlayerMarkers();
                 alert("Admin access granted.");
@@ -1762,6 +1905,13 @@
                 if (defenderReason && defenderReason.trim() !== "") {
                     const defText = defenderReason.trim();
 
+                    // Record dispute in Firebase so it surfaces on the Admin Account Panel
+                    db.ref('game/tagDisputes/' + myName).set({
+                        taggedBy: attackerName,
+                        reason: defText,
+                        timestamp: Date.now()
+                    });
+
                     const disputeMsg = `⚠️ <b>TAG DISPUTE RAISED</b>\n` +
                                        `<b>Defender (Target):</b> ${myName}\n` +
                                        `<b>Defender's Reason:</b> "${defText}"\n\n` +
@@ -1780,6 +1930,13 @@
 
         const map = L.map('map', { zoomControl: false }).setView([49.2365, -122.9730], 15);
 
+        // Custom Leaflet panes to ensure marker icons render above the play boundary zone polygon
+        map.createPane('zonePane');
+        map.getPane('zonePane').style.zIndex = 400;
+
+        map.createPane('playerMarkerPane');
+        map.getPane('playerMarkerPane').style.zIndex = 650;
+
         L.tileLayer('https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_26zr_1_6bf24d0ce20fd9315d8cca83', {
             maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
@@ -1787,7 +1944,7 @@
 
         const zones = {
             1: {
-                name: "Phase 1 (2:30 - 3:30 PM)",
+                name: "Phase 1: Full Area",
                 color: "#ff8c00",
                 coords: [
                     [49.2399761, -122.9848523],
@@ -1806,7 +1963,7 @@
                 ]
             },
             2: {
-                name: "Phase 2 (3:30 - 4:30 PM)",
+                name: "Phase 2: Inner Zone",
                 color: "#ffd700",
                 coords: [
                     [49.2421211, -122.9755439],
@@ -1821,7 +1978,7 @@
                 ]
             },
             3: {
-                name: "Phase 3 (4:30 - 5:30 PM)",
+                name: "Phase 3: Restricted Zone",
                 color: "#00e676",
                 coords: [
                     [49.2370157, -122.9641535],
@@ -1838,7 +1995,7 @@
                 ]
             },
             4: {
-                name: "Phase 4 (5:30 - 6:15 PM)",
+                name: "Phase 4: Final Showdown",
                 color: "#00b0ff",
                 coords: [
                     [49.2417755, -122.9730262],
@@ -2002,6 +2159,7 @@
                 if (activePolygon) map.removeLayer(activePolygon);
 
                 activePolygon = L.polygon(interpolatedCoords, {
+                    pane: 'zonePane',
                     color: zones[toPhase].color,
                     fillColor: zones[toPhase].color,
                     fillOpacity: 0.35,
@@ -2029,6 +2187,7 @@
 
             const zone = zones[phaseNum];
             activePolygon = L.polygon(zone.coords, {
+                pane: 'zonePane',
                 color: zone.color,
                 fillColor: zone.color,
                 fillOpacity: 0.35,
@@ -2051,24 +2210,7 @@
 
         function updateGame() {
             const now = new Date();
-            const year = now.getFullYear();
-            const month = now.getMonth(); 
-            const date = now.getDate();
-            const minutes = now.getHours() * 60 + now.getMinutes();
-
             document.getElementById('time-label').innerText = `Clock: ${now.toLocaleTimeString()}`;
-
-            if (year === 2026 && month === 8 && date === 7) {
-                if (minutes >= 14 * 60 + 30 && !gameCommencedAnnounced) {
-                    gameCommencedAnnounced = true;
-                    triggerAnnouncement("ALL PLAYERS", "GAME_COMMENCED");
-                }
-
-                if (minutes >= 18 * 60 + 15 && !gameOverAnnounced) {
-                    gameOverAnnounced = true;
-                    triggerAnnouncement("EVERYONE", "GAME_OVER");
-                }
-            }
 
             const activePhase = getPhaseByTime();
             if (!manualOverride) {
@@ -2177,6 +2319,7 @@
                     playerMarkers[name].setPopupContent(popupContent);
                 } else {
                     playerMarkers[name] = L.circleMarker([data.lat, data.lng], {
+                        pane: 'playerMarkerPane',
                         radius: radius,
                         fillColor: markerColor,
                         color: strokeColor,
@@ -2222,6 +2365,7 @@
 
                     if (!isAdmin) {
                         playerMarker = L.circleMarker([lat, lng], {
+                            pane: 'playerMarkerPane',
                             radius: 8,
                             fillColor: selfColor,
                             color: "#ffffff",
