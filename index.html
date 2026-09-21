@@ -1678,7 +1678,23 @@
                 if (revivalQueue.length > 0) {
                     const revivedPlayer = revivalQueue.shift();
 
+                    const currentSelectedName = selectedPlayerIndex !== null ? players[selectedPlayerIndex] : null;
+
+                    // Slot revived player into the exact array index of the eliminated player
+                    const elimIndex = players.indexOf(eliminatedPlayer);
+                    if (elimIndex !== -1) {
+                        players[elimIndex] = revivedPlayer;
+                    }
+
                     revivalQueue.push(eliminatedPlayer);
+
+                    if (currentSelectedName !== null) {
+                        selectedPlayerIndex = players.indexOf(currentSelectedName);
+                    }
+
+                    if (!isAdmin) {
+                        populatePlayerDropdown();
+                    }
 
                     db.ref('game/revivalQueue').set(revivalQueue);
                     db.ref('game/eliminated/' + revivedPlayer).remove();
