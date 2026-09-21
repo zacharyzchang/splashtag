@@ -960,6 +960,15 @@
             "Jessica", "Daniel"
         ];
 
+        // Assign hidden numbers sequentially to each player
+        let playerNumbers = {};
+        players.forEach((p, idx) => {
+            playerNumbers[p] = idx;
+        });
+
+        // Store history of removed numbers for reinstatement assignment
+        let removedNumbersHistory = [];
+
         let selectedPlayerIndex = null;
         let isAdmin = false;
         let isOobPaused = false;
@@ -985,6 +994,17 @@
 
         db.ref('game/revivalQueue').on('value', (snapshot) => {
             revivalQueue = snapshot.val() || [];
+        });
+
+        db.ref('game/playerNumbers').on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                playerNumbers = val;
+            }
+        });
+
+        db.ref('game/removedNumbersHistory').on('value', (snapshot) => {
+            removedNumbersHistory = snapshot.val() || [];
         });
 
         function populatePlayerDropdown() {
@@ -1544,22 +1564,26 @@
 
         function getActiveTargetsForPlayer(playerIdx) {
             const playerName = players[playerIdx];
-            if (globalEliminated[playerName]) return [];
+            if (globalEliminated[playerName] || playerNumbers[playerName] === undefined || playerNumbers[playerName] === null) return [];
 
-            const livingTargets = [];
+            // Filter active players who have a valid hidden number and sort them by hidden number
+            const activePlayers = players
+                .filter(p => !globalEliminated[p] && playerNumbers[p] !== undefined && playerNumbers[p] !== null)
+                .sort((a, b) => playerNumbers[a] - playerNumbers[b]);
 
-            for (let i = 0; i < players.length; i++) {
-                const targetIndex = (playerIdx + 1 + i) % players.length;
-                const targetName = players[targetIndex];
+            const selfPos = activePlayers.indexOf(playerName);
+            if (selfPos === -1) return [];
 
-                if (targetName === playerName) continue;
+            const targets = [];
+            const activeCount = activePlayers.length;
 
-                if (!globalEliminated[targetName] && !livingTargets.includes(targetName)) {
-                    livingTargets.push(targetName);
-                }
+            // Pick up to 5 subsequent players in order of hidden numbers (cyclically)
+            for (let i = 1; i < activeCount && targets.length < 5; i++) {
+                const targetPos = (selfPos + i) % activeCount;
+                targets.push(activePlayers[targetPos]);
             }
 
-            return livingTargets.slice(0, 5);
+            return targets;
         }
 
         function formatLastSeen(timestamp) {
@@ -1674,29 +1698,30 @@
                 db.ref('game/eliminationCounts/' + attackerName).transaction((current) => (current || 0) + 1);
             }
 
+            // Remove and store the eliminated player's hidden target number
+            const removedNumber = playerNumbers[eliminatedPlayer];
+            delete playerNumbers[eliminatedPlayer];
+            if (removedNumber !== undefined && removedNumber !== null) {
+                removedNumbersHistory.push(removedNumber);
+                db.ref('game/removedNumbersHistory').set(removedNumbersHistory);
+            }
+
             if (!isSwapRevivalsPaused) {
                 if (revivalQueue.length > 0) {
                     const revivedPlayer = revivalQueue.shift();
 
-                    const currentSelectedName = selectedPlayerIndex !== null ? players[selectedPlayerIndex] : null;
-
-                    // Slot revived player into the exact array index of the eliminated player
-                    const elimIndex = players.indexOf(eliminatedPlayer);
-                    if (elimIndex !== -1) {
-                        players[elimIndex] = revivedPlayer;
+                    // Reinstate revived player with the number of the last person removed
+                    const lastRemovedNum = removedNumbersHistory.pop();
+                    if (lastRemovedNum !== undefined) {
+                        playerNumbers[revivedPlayer] = lastRemovedNum;
                     }
 
                     revivalQueue.push(eliminatedPlayer);
 
-                    if (currentSelectedName !== null) {
-                        selectedPlayerIndex = players.indexOf(currentSelectedName);
-                    }
-
-                    if (!isAdmin) {
-                        populatePlayerDropdown();
-                    }
-
                     db.ref('game/revivalQueue').set(revivalQueue);
+                    db.ref('game/playerNumbers').set(playerNumbers);
+                    db.ref('game/removedNumbersHistory').set(removedNumbersHistory);
+
                     db.ref('game/eliminated/' + revivedPlayer).remove();
                     db.ref('game/eliminated/' + eliminatedPlayer).set(true);
 
@@ -1711,6 +1736,8 @@
                     db.ref('game/revivalQueue').set(revivalQueue);
                 }
             }
+
+            db.ref('game/playerNumbers').set(playerNumbers);
 
             if (attackerName) {
                 db.ref('game/eliminatedBy/' + eliminatedPlayer).set(attackerName);
